@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gelato Club – Kiosk Convalide</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    body { margin: 0; background: #0b0d10; color: #e9eef5; }
+    header { position: sticky; top: 0; background: rgba(11,13,16,0.92); backdrop-filter: blur(8px);
+      padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.08); z-index: 10; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .pill { padding: 8px 10px; border-radius: 999px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); }
+    .pill strong { font-weight: 700; }
+    .tabs { display: flex; gap: 10px; margin-top: 10px; }
+    .tab { flex: 1; padding: 12px; border-radius: 12px; text-align: center; cursor: pointer;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); user-select: none; }
+    .tab.active { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.18); }
+    main { padding: 14px; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .card { border-radius: 16px; padding: 14px; background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10); }
+    .title { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+    .sub { opacity: 0.85; font-size: 14px; }
+    .meta { opacity: 0.70; font-size: 12px; margin-top: 6px; }
+    .btns { display: flex; gap: 10px; margin-top: 12px; }
+    button { flex: 1; padding: 14px 12px; border-radius: 14px; border: 0; cursor: pointer; font-weight: 800; }
+    .ok { background: #1c7d3a; color: #fff; }
+    .no { background: #9d2b2b; color: #fff; }
+    .ghost { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.12); }
+    .blink { animation: blink 1s infinite; }
+    @keyframes blink { 0%,100% { box-shadow: 0 0 0 rgba(255,255,255,0); border-color: rgba(255,255,255,0.10); }
+                      50% { box-shadow: 0 0 24px rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.28); } }
+    .login { max-width: 520px; margin: 40px auto; padding: 16px; }
+    .field { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+    input { padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.06); color: #fff; font-size: 16px; }
+    .err { margin-top: 10px; color: #ffb4b4; white-space: pre-wrap; }
+    .muted { opacity: 0.7; font-size: 12px; }
+  
+    /* Portrait/vertical layout tweaks */
+    @media (orientation: portrait) {
+      header { padding: 10px 12px; }
+      .row { gap: 8px; }
+      .pill { flex: 1 1 45%; }
+      .tabs { flex-direction: column; }
+      .tab { padding: 14px; font-size: 18px; }
+      main { padding: 12px; }
+      .title { font-size: 22px; }
+      .sub { font-size: 16px; }
+      button { padding: 18px 14px; font-size: 18px; }
+    }
+
+
+    /* Brand header */
+    .brandbox{
+      display:flex; align-items:center; gap:12px;
+      padding:12px 14px; margin-bottom:10px;
+      border-radius:16px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04));
+      border: 1px solid rgba(255,255,255,0.14);
+    }
+    .brandbox img{
+      width:44px; height:44px; object-fit:contain;
+      border-radius:12px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      padding:6px;
+    }
+    .brandtitle{ display:flex; flex-direction:column; line-height:1.1; }
+    .brandtitle .kiosk{ font-size:20px; font-weight:900; letter-spacing:0.3px; }
+    .brandtitle .subline{ opacity:0.75; font-size:12px; margin-top:4px; }
+
+    /* Success/Fail popup */
+    .overlay{
+      position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+      background: rgba(0,0,0,0.35);
+      z-index: 9999;
+    }
+    .overlay.show{ display:flex; animation: ovIn 120ms ease-out; }
+    @keyframes ovIn{ from{ opacity:0; } to{ opacity:1; } }
+
+    .toast{
+      width:min(420px, 90vw);
+      border-radius:18px;
+      padding:16px;
+      background: rgba(20,24,30,0.96);
+      border: 1px solid rgba(255,255,255,0.16);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+      transform: translateY(8px) scale(0.98);
+      opacity: 0;
+      animation: toastIn 180ms ease-out forwards;
+    }
+    @keyframes toastIn{
+      to{ transform: translateY(0) scale(1); opacity:1; }
+    }
+    .toastRow{ display:flex; gap:12px; align-items:center; }
+    .badge{
+      width:48px; height:48px; border-radius:16px; display:grid; place-items:center;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.06);
+      flex: 0 0 auto;
+    }
+    .badge.ok{ background: rgba(28,125,58,0.20); border-color: rgba(28,125,58,0.35); }
+    .badge.no{ background: rgba(157,43,43,0.20); border-color: rgba(157,43,43,0.35); }
+    .toastTitle{ font-weight:900; font-size:18px; }
+    .toastSub{ margin-top:4px; opacity:0.75; font-size:13px; }
+    .toastHint{ margin-top:10px; opacity:0.55; font-size:12px; }
+
+    @media (orientation: portrait){
+      .brandbox{ padding:12px; }
+      .brandbox img{ width:48px; height:48px; }
+      .brandtitle .kiosk{ font-size:22px; }
+      .toast{ width:min(520px, 92vw); }
+      .toastTitle{ font-size:20px; }
+    }
+
+  </style>
+</head>
+<body>
+  <header>
+
+    <div class="brandbox">
+      <img src="icon/logo.png" alt="Logo Gelateria" onerror="this.style.display='none'">
+      <div class="brandtitle">
+        <div class="kiosk">Kiosk</div>
+        <div class="subline">Gelateria L’Altromare · Convalide rapide</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="pill">Promo approvate oggi: <strong id="cPromo">–</strong></div>
+      <div class="pill">Premi approvati oggi: <strong id="cRewards">–</strong></div>
+      <div class="pill">Aggiornamento: <strong id="lastUpd">–</strong></div>
+      <button class="ghost" id="btnRefresh" style="flex:0 0 auto; padding:10px 12px;">Aggiorna</button>
+      <button class="ghost" id="btnLogout" style="flex:0 0 auto; padding:10px 12px; display:none;">Logout</button>
+    </div>
+    <div class="tabs" id="tabs" style="display:none;">
+      <div class="tab active" data-tab="promo">Promo</div>
+      <div class="tab" data-tab="rewards">Premi tessera</div>
+    </div>
+  </header>
+
+  <main>
+    <div id="loginBox" class="login" style="display:none;">
+      <div class="card">
+        <div class="title">Login staff</div>
+        <div class="muted">Usa l’account staff (Supabase Auth). La sessione resta sul dispositivo finché fai logout.</div>
+        <div class="field">
+          <label>Email</label>
+          <input id="email" type="email" autocomplete="username" placeholder="staff@..." />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" />
+        </div>
+        <div class="btns">
+          <button class="ok" id="btnLogin">Entra</button>
+        </div>
+        <div class="err" id="loginErr"></div>
+      </div>
+    </div>
+
+    <div id="appBox" style="display:none;">
+      <div class="grid" id="list"></div>
+      <div class="muted" id="empty" style="display:none; margin-top:10px;">Nessuna richiesta in attesa.</div>
+    </div>
+  </main>
+
+  <!-- Supabase JS (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // === CONFIG: incolla i tuoi dati ===
+    const SUPABASE_URL = "https://cbgwfngseoppybsbbwwo.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNiZ3dmbmdzZW9wcHlic2Jid3dvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4NTk4NDYsImV4cCI6MjA3NTQzNTg0Nn0.5U_4SNDZ18YA7PHY7dH3vZItGp-_XzeQxS1IMAuBQEs";
+
+    
+    if (!window.supabase || !window.supabase.createClient) {
+      alert("Errore: libreria Supabase non caricata. Controlla connessione internet o blocchi di rete.");
+    }
+
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: "gc_kiosk_session_v1",
+        storage: window.localStorage,
+      },
+    });
+
+    const el = (id) => document.getElementById(id);
+
+    let currentTab = "promo";
+    let pollTimer = null;
+
+    function setLastUpd() {
+      const d = new Date();
+      el("lastUpd").textContent = d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+
+    async function loadCounters() {
+      const { data, error } = await sb.from("kiosk_daily_counters").select("*").limit(1).maybeSingle();
+      if (!error && data) {
+        el("cPromo").textContent = data.promo_approved_today ?? 0;
+        el("cRewards").textContent = data.rewards_approved_today ?? 0;
+      }
+    }
+
+    function renderList(items, kind) {
+      const list = el("list");
+      list.innerHTML = "";
+
+      el("empty").style.display = items.length ? "none" : "block";
+
+      for (const x of items) {
+        const card = document.createElement("div");
+        card.className = "card blink"; // lampeggia finché è in lista pending
+
+        const title = document.createElement("div");
+        title.className = "title";
+        title.textContent = (kind === "promo") ? x.promo_title : x.reward_title;
+
+        const sub = document.createElement("div");
+        sub.className = "sub";
+        sub.textContent = x.customer_label || "Ospite";
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = `Codice: ${x.code || "—"} · Stato: ${x.status} · ${new Date(x.created_at).toLocaleString("it-IT")}`;
+
+        const btns = document.createElement("div");
+        btns.className = "btns";
+
+        const bOk = document.createElement("button");
+        bOk.className = "ok";
+        bOk.textContent = "Convalida";
+
+        const bNo = document.createElement("button");
+        bNo.className = "no";
+        bNo.textContent = "Annulla";
+
+        bOk.onclick = async () => {
+          bOk.disabled = true; bNo.disabled = true;
+          const ok = await approve(kind, x.id);
+          if (!ok) { bOk.disabled = false; bNo.disabled = false; return; }
+          await refreshAll();
+        };
+
+        bNo.onclick = async () => {
+          bOk.disabled = true; bNo.disabled = true;
+          const ok = await reject(kind, x.id);
+          if (!ok) { bOk.disabled = false; bNo.disabled = false; return; }
+          await refreshAll();
+        };
+
+        btns.appendChild(bOk);
+        btns.appendChild(bNo);
+
+        card.appendChild(title);
+        card.appendChild(sub);
+        card.appendChild(meta);
+        card.appendChild(btns);
+
+        list.appendChild(card);
+      }
+    }
+
+    async function loadQueue(kind) {
+      if (kind === "promo") {
+        const { data, error } = await sb.from("kiosk_pending_promos").select("*");
+        if (error) { alert("Errore promo: " + error.message); return []; }
+
+        // Filtro anti-spazzatura: non mostra promo waiting troppo vecchie o già scadute
+        const now = new Date();
+        const minDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 giorni
+        const rows = (data || []).filter(r => {
+          try {
+            const created = new Date(r.created_at);
+            if (created < minDate) return false;
+            if (r.expires_at) {
+              const exp = new Date(r.expires_at);
+              if (!isNaN(exp.getTime()) && exp <= now) return false;
+            }
+            return true;
+          } catch {
+            return true;
+          }
+        });
+
+        return rows;
+      } else {
+        const { data, error } = await sb.from("kiosk_pending_rewards").select("*");
+        if (error) { alert("Errore premi: " + error.message); return []; }
+        return data || [];
+      }
+    }
+
+    async function approve(kind, id) {
+      if (kind === "promo") {
+        const { error } = await sb.from("redemptions")
+          .update({ status: "approved" })
+          .eq("id", id)
+          .eq("status", "waiting");
+        if (error) { alert("Convalida promo fallita: " + error.message); return false; }
+        showToast("ok","Promo convalidata", "");
+        return true;
+      } else {
+        const { error } = await sb.from("loyalty_reward_redemptions")
+          .update({ status: "approved", approved_at: new Date().toISOString() })
+          .eq("id", id)
+          .in("status", ["waiting","pending"]);
+        if (error) { alert("Convalida premio fallita: " + error.message); return false; }
+        showToast("ok","Premio convalidato", "");
+        return true;
+      }
+    }
+
+    async function reject(kind, id) {
+      if (kind === "promo") {
+        const { error } = await sb.from("redemptions")
+          .update({ status: "canceled" })
+          .eq("id", id)
+          .eq("status", "waiting");
+        if (error) { alert("Annulla promo fallito: " + error.message); return false; }
+        showToast("no","Promo annullata", "");
+        return true;
+      } else {
+        const { error } = await sb.from("loyalty_reward_redemptions")
+          .update({ status: "canceled" })
+          .eq("id", id)
+          .in("status", ["waiting","pending"]);
+        if (error) { alert("Annulla premio fallito: " + error.message); return false; }
+        showToast("no","Premio annullato", "");
+        return true;
+      }
+    }
+
+    async function refreshAll() {
+      await loadCounters();
+      const items = await loadQueue(currentTab);
+      renderList(items, currentTab);
+      setLastUpd();
+    }
+
+    function setTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll(".tab").forEach(t => {
+        t.classList.toggle("active", t.dataset.tab === tab);
+      });
+      refreshAll();
+    }
+
+    function startPolling() {
+      stopPolling();
+      pollTimer = setInterval(refreshAll, 2000);
+    }
+    function stopPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = null;
+    }
+
+    async function showAppOrLogin() {
+      const { data } = await sb.auth.getSession();
+      const session = data?.session;
+
+      if (!session) {
+        el("loginBox").style.display = "block";
+        el("appBox").style.display = "none";
+        el("tabs").style.display = "none";
+        el("btnLogout").style.display = "none";
+        stopPolling();
+        return;
+      }
+
+      // (Opzionale) controllo staff: se la SELECT su profiles è bloccata da RLS,
+      // non blocchiamo il kiosk (ci penseranno le policy UPDATE a proteggere le azioni).
+      // Se invece riusciamo a leggere profiles, richiediamo is_staff=true.
+      const uid = session.user.id;
+      let prof = null;
+      try {
+        const res = await sb.from("profiles").select("is_staff,email").eq("id", uid).maybeSingle();
+        if (!res.error) prof = res.data;
+      } catch (_) {}
+
+      if (prof && prof.is_staff === false) {
+        await sb.auth.signOut();
+        el("loginErr").textContent = "Accesso negato: account non staff.";
+        el("loginBox").style.display = "block";
+        return;
+      }
+
+      el("loginBox").style.display = "none";
+      el("appBox").style.display = "block";
+      el("tabs").style.display = "flex";
+      el("btnLogout").style.display = "inline-block";
+
+      await refreshAll();
+      startPolling();
+    }
+
+    // UI handlers
+    document.addEventListener("click", (e) => {
+      const t = e.target.closest(".tab");
+      if (t) setTab(t.dataset.tab);
+    });
+
+    el("btnRefresh").onclick = refreshAll;
+
+    el("btnLogout").onclick = async () => {
+      await sb.auth.signOut();
+      await showAppOrLogin();
+    };
+
+    el("btnLogin").onclick = async () => {
+      el("loginErr").textContent = "";
+      const email = el("email").value.trim();
+      const password = el("password").value;
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) { el("loginErr").textContent = error.message; return; }
+      await showAppOrLogin();
+    };
+
+    // init
+    sb.auth.onAuthStateChange(() => showAppOrLogin());
+    showAppOrLogin();
+  </script>
+
+  <div class="overlay" id="overlay">
+    <div class="toast" role="status" aria-live="polite">
+      <div class="toastRow">
+        <div class="badge ok" id="toastBadge"></div>
+        <div>
+          <div class="toastTitle" id="toastTitle">—</div>
+          <div class="toastSub" id="toastSub">—</div>
+          <div class="toastHint">Ok: si chiude da solo</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
