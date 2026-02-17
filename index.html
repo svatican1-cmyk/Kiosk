@@ -68,8 +68,10 @@ body{
   display:flex;
   gap:10px;
 }
-button{
+.buttons button{
   flex:1;
+}
+button{
   padding:14px;
   font-size:16px;
   border-radius:10px;
@@ -100,6 +102,15 @@ input{
   border:none;
   width:250px;
 }
+.loginBtn{
+  width:250px;
+  padding:12px;
+  border-radius:10px;
+  font-size:16px;
+  font-weight:700;
+  background:#e5e7eb;
+  color:#0f172a;
+}
 </style>
 </head>
 <body>
@@ -109,7 +120,16 @@ input{
 <script>
 const sb = window.supabase.createClient(
   "https://cbgwfngseoppybsbbwwo.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNiZ3dmbmdzZW9wcHlic2Jid3dvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4NTk4NDYsImV4cCI6MjA3NTQzNTg0Nn0.5U_4SNDZ18YA7PHY7dH3vZItGp-_XzeQxS1IMAuBQEs"
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNiZ3dmbmdzZW9wcHlic2Jid3dvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4NTk4NDYsImV4cCI6MjA3NTQzNTg0Nn0.5U_4SNDZ18YA7PHY7dH3vZItGp-_XzeQxS1IMAuBQEs",
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: window.localStorage,
+      storageKey: "gelatoclub_kiosk_auth_v1"
+    }
+  }
 );
 
 let promotions = [];
@@ -140,7 +160,7 @@ function renderLogin(){
     <h2>Login Staff</h2>
     <input id="email" placeholder="Email">
     <input id="password" type="password" placeholder="Password">
-    <button onclick="login()">Accedi</button>
+    <button class="loginBtn" onclick="login()">Accedi</button>
   </div>`;
 }
 
@@ -156,7 +176,7 @@ async function checkStaff(){
   const {data:user}=await sb.auth.getUser();
   if(!user?.user?.email) return renderLogin();
 
-  const {data}=await supabase
+  const {data}=await sb
     .from("staff_emails")
     .select("*")
     .eq("email",user.user.email)
@@ -178,7 +198,7 @@ async function startDashboard(){
 }
 
 async function loadRedemptions(){
-  const {data}=await supabase
+  const {data}=await sb
     .from("redemptions")
     .select("*")
     .eq("status","waiting")
@@ -230,7 +250,13 @@ async function cancel(id){
   loadRedemptions();
 }
 
-sb.auth.getSession().then(({data})=>{
+sb.auth.getSession().then(({data, error})=>{
+  if(error){
+    try{ localStorage.removeItem("gelatoclub_kiosk_auth_v1"); }catch(e){}
+    sb.auth.signOut();
+    renderLogin();
+    return;
+  }
   if(data.session){
     checkStaff();
   }else{
