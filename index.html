@@ -136,7 +136,11 @@ let promotions = [];
 let totalCount = parseInt(localStorage.getItem("kiosk_total")) || 0;
 
 async function loadPromotions(){
-  const res = await fetch("YOUR_SUPABASE_URL/storage/v1/object/public/config/promotions.json");
+  const res = await fetch("https://cbgwfngseoppybsbbwwo.supabase.co/storage/v1/object/public/config/promotions.json", { cache: "no-store" });
+  if(!res.ok){
+    const txt = await res.text();
+    throw new Error("Impossibile caricare promotions.json (" + res.status + "). URL: https://cbgwfngseoppybsbbwwo.supabase.co/storage/v1/object/public/config/promotions.json. Risposta: " + txt.slice(0,120));
+  }
   promotions = await res.json();
 }
 
@@ -192,7 +196,7 @@ async function checkStaff(){
 }
 
 async function startDashboard(){
-  await loadPromotions();
+  try{ await loadPromotions(); }catch(e){ console.error(e); alert(String(e.message||e)); return; }
   setInterval(loadRedemptions,2000);
   loadRedemptions();
 }
