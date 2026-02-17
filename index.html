@@ -201,6 +201,37 @@ button:disabled{
 .focus .user{ font-size:18px; }
 .focus .buttons button{ padding:18px; font-size:18px; border-radius:12px; }
 
+
+.tabs{
+  display:flex;
+  gap:10px;
+  margin-top:12px;
+}
+.tab{
+  flex:1;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid rgba(148,163,184,0.25);
+  background:rgba(15,23,42,0.55);
+  font-weight:800;
+  text-align:center;
+  cursor:pointer;
+  user-select:none;
+}
+.tab.active{
+  background:rgba(59,130,246,0.65);
+  border-color:rgba(59,130,246,0.55);
+}
+.countpill{
+  margin-left:8px;
+  padding:2px 8px;
+  border-radius:999px;
+  background:rgba(0,0,0,0.35);
+  border:1px solid rgba(148,163,184,0.25);
+  font-size:12px;
+  font-weight:900;
+}
+
 </style>
 </head>
 <body>
@@ -226,9 +257,13 @@ const sb = window.supabase.createClient(
 let promotions = [];
 let totalCount = parseInt(localStorage.getItem("kiosk_total")) || 0;
 let focusMode = (localStorage.getItem("kiosk_focus") === "1");
-let pendingIds = new Set();
+let activeTab = (localStorage.getItem("kiosk_tab") || "promo");
+let pendingPromoIds = new Set();
+let pendingRewardIds = new Set();
 let online = true;
 let lastError = "";
+let promoRows = [];
+let rewardRows = [];
 
 
 async function loadPromotions(){
@@ -267,6 +302,17 @@ function minutesAgo(ts){
   const ms = Date.now() - new Date(ts).getTime();
   return Math.max(0, Math.floor(ms/60000));
 }
+
+function isRewardPendingStatus(s){
+  if(!s) return false;
+  const v = String(s).toLowerCase();
+  return v === "waiting" || v === "pending" || v === "requested";
+}
+function formatDateTime(ts){
+  if(!ts) return "";
+  return new Date(ts).toLocaleString("it-IT",{hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"});
+}
+
 
 
 function renderLogin(){
@@ -309,8 +355,9 @@ async function checkStaff(){
 async function startDashboard(){
   document.body.classList.toggle("focus", focusMode);
   try{ await loadPromotions(); }catch(e){ console.error(e); alert(String(e.message||e)); return; }
-  setInterval(loadRedemptions,2000);
-  loadRedemptions();
+  setInterval(()=>{ loadRedemptions(); loadRewards(); },2000);
+  renderAll();
+  loadRewards();
 }
 
 async function loadRedemptions(){
@@ -333,11 +380,11 @@ async function loadRedemptions(){
     const toExpire = rows.filter(r => (now - new Date(r.created_at).getTime()) > 5*60*1000).map(r => r.id);
     if(toExpire.length){
       // avoid double-submission in the same tick
-      const expireIds = toExpire.filter(id => !pendingIds.has(id));
+      const expireIds = toExpire.filter(id => !pendingPromoIds.has(id));
       if(expireIds.length){
-        expireIds.forEach(id => pendingIds.add(id));
+        expireIds.forEach(id => pendingPromoIds.add(id));
         const { error: expErr } = await sb.from("redemptions").update({status:"expired"}).in("id", expireIds);
-        expireIds.forEach(id => pendingIds.delete(id));
+        expireIds.forEach(id => pendingPromoIds.delete(id));
         if(expErr){
           console.error(expErr);
           lastError = expErr.message || String(expErr);
@@ -347,29 +394,188 @@ async function loadRedemptions(){
 
     // filter out those we just expired (they'll disappear next poll anyway)
     const visible = rows.filter(r => !toExpire.includes(r.id));
-    renderDashboard(visible);
+    promoRows = visible;
+    renderAll();
   }catch(e){
     online = false;
     lastError = e?.message ? e.message : String(e);
     console.error(e);
-    renderDashboard([]); // still render header/status
+    promoRows = [];
+    renderAll(); // still render header/status
   }
 }
 
+
+async function loadRewards(){
+  try{
+    const { data, error } = await sb
+      .from("loyalty_reward_redemptions")
+      .select("*")
+      .order("created_at",{ascending:true})
+      .limit(200);
+
+    if(error) throw error;
+
+    online = true;
+    lastError = "";
+
+    const rows = (data || []).filter(r => isRewardPendingStatus(r.status));
+
+    const now = Date.now();
+    const expired = rows.filter(r => r.expire_at && (new Date(r.expire_at).getTime() < now)).map(r => r.id);
+    if(expired.length){
+      const ids = expired.filter(id => !pendingRewardIds.has(id));
+      if(ids.length){
+        ids.forEach(id => pendingRewardIds.add(id));
+        const { error: expErr } = await sb.from("loyalty_reward_redemptions")
+          .update({status:"rejected"})
+          .in("id", ids);
+        ids.forEach(id => pendingRewardIds.delete(id));
+        if(expErr){
+          console.error(expErr);
+          lastError = expErr.message || String(expErr);
+        }
+      }
+    }
+
+    rewardRows = rows.filter(r => !expired.includes(r.id));
+    renderAll();
+  }catch(e){
+    online = false;
+    lastError = e?.message ? e.message : String(e);
+    console.error(e);
+    rewardRows = [];
+    renderAll();
+  }
+}
+
+async function approveReward(id, title=""){
+  if(pendingRewardIds.has(id)) return;
+  pendingRewardIds.add(id);
+  renderAll();
+  try{
+    const { error } = await sb.from("loyalty_reward_redemptions")
+      .update({status:"approved", approved_at: new Date().toISOString()})
+      .eq("id", id);
+    if(error) throw error;
+    totalCount++;
+    localStorage.setItem("kiosk_total", totalCount);
+    showToast("✅ Premio approvato: " + (title || id), "ok");
+  }catch(e){
+    console.error(e);
+    showToast("❌ Errore approvazione premio", "bad");
+  }finally{
+    pendingRewardIds.delete(id);
+    loadRewards();
+  }
+}
+
+async function rejectReward(id, title=""){
+  if(pendingRewardIds.has(id)) return;
+  pendingRewardIds.add(id);
+  renderAll();
+  try{
+    const { error } = await sb.from("loyalty_reward_redemptions")
+      .update({status:"rejected"})
+      .eq("id", id);
+    if(error) throw error;
+    showToast("❌ Premio rifiutato: " + (title || id), "bad");
+  }catch(e){
+    console.error(e);
+    showToast("❌ Errore rifiuto premio", "bad");
+  }finally{
+    pendingRewardIds.delete(id);
+    loadRewards();
+  }
+}
+
+function setTab(tab){
+  activeTab = tab;
+  localStorage.setItem("kiosk_tab", tab);
+  renderAll();
+}
+
+function renderAll(){
+  renderDashboard(promoRows);
+}
+
 function renderDashboard(data){
-  const waitingCount = data.length;
-  const today = todayCount(data); // keeps your existing "oggi" behavior (waiting today). If you later want "handled today", we can change.
+  const waitingCount = (promoRows || []).length;
+  const rewardWaiting = (rewardRows || []).length;
+
   const statusLabel = online ? "Online" : "Offline";
   const dotClass = online ? "dot" : "dot off";
-  const errText = (!online && lastError) ? `<div class="small">Errore: ${String(lastError).slice(0,80)}</div>` : "";
+  const errText = (!online && lastError) ? `<div class="small">Errore: ${String(lastError).slice(0,120)}</div>` : "";
+
+  const tabs = `
+    <div class="tabs">
+      <div class="tab ${activeTab==="promo" ? "active":""}" onclick="setTab('promo')">
+        Promo <span class="countpill">${waitingCount}</span>
+      </div>
+      <div class="tab ${activeTab==="rewards" ? "active":""}" onclick="setTab('rewards')">
+        Premi <span class="countpill">${rewardWaiting}</span>
+      </div>
+    </div>
+  `;
+
+  const promoList = `
+    <div class="container">
+      ${(promoRows || []).map(r=>{
+        const mins = minutesAgo(r.created_at);
+        const age = mins===0 ? "adesso" : (mins===1 ? "1 min" : (mins + " min"));
+        const disabled = pendingPromoIds.has(r.id) ? "disabled" : "";
+        const title = (getPromoTitle(r.promo_id) || r.promo_id || "").replace(/'/g,"\'");
+        return `
+        <div class="card waiting">
+          <div class="promo">${getPromoTitle(r.promo_id)}</div>
+          <div class="user">${r.user_email||"OSPITE"}</div>
+          <div class="time">${formatTime(r.created_at)} • in attesa da ${age}</div>
+          <div class="buttons">
+            <button class="approve" ${disabled} onclick="approve('${r.id}','${title}')">CONVALIDA</button>
+            <button class="cancel" ${disabled} onclick="cancel('${r.id}','${title}')">ANNULLA</button>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>
+  `;
+
+  const rewardsList = `
+    <div class="container">
+      ${(rewardRows || []).map(r=>{
+        const mins = minutesAgo(r.created_at);
+        const age = mins===0 ? "adesso" : (mins===1 ? "1 min" : (mins + " min"));
+        const disabled = pendingRewardIds.has(r.id) ? "disabled" : "";
+        const title = (r.reward_title || r.reward_id || "").replace(/'/g,"\'");
+        const exp = r.expire_at ? ` • scade: ${formatTime(r.expire_at)}` : "";
+        const who = r.user_email || r.client_ref || "OSPITE";
+        return `
+        <div class="card waiting">
+          <div class="promo">${r.reward_title || "Premio"}</div>
+          <div class="user">${who}</div>
+          <div class="time">${formatTime(r.created_at)} • in attesa da ${age}${exp}</div>
+          <div class="small">Costo: <b>${r.cost_points}</b> punti • Codice: <b>${r.code || "-"}</b></div>
+          <div class="buttons">
+            <button class="approve" ${disabled} onclick="approveReward('${r.id}','${title}')">CONVALIDA PREMIO</button>
+            <button class="cancel" ${disabled} onclick="rejectReward('${r.id}','${title}')">RIFIUTA</button>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>
+  `;
+
+  const main = (activeTab === "rewards") ? rewardsList : promoList;
 
   document.getElementById("app").innerHTML=`
   <div class="header">
-    <div class="title">Convalide in attesa</div>
+    <div class="title" style="text-align:center;">Kiosk</div>
+    <div class="small" style="text-align:center; margin-top:2px; opacity:0.85;">Gelateria L’Altromare</div>
+    <div style="height:10px;"></div>
+
+    <div class="title">${activeTab==="rewards" ? "Premi in attesa" : "Convalide in attesa"}</div>
     <div class="toprow">
       <div class="badge"><span class="${dotClass}"></span>${statusLabel}</div>
-      <div class="badge">In attesa: ${waitingCount}</div>
-      <div class="badge">Oggi: ${today}</div>
+      <div class="badge">Promo: ${waitingCount}</div>
+      <div class="badge">Premi: ${rewardWaiting}</div>
       <div class="badge">Totale: ${totalCount}</div>
 
       <div class="toggle ${focusMode ? "on":""}" onclick="toggleFocus()">
@@ -377,26 +583,11 @@ function renderDashboard(data){
         <span class="switch"></span>
       </div>
     </div>
+    ${tabs}
     ${errText}
   </div>
 
-  <div class="container">
-    ${data.map(r=>{
-      const mins = minutesAgo(r.created_at);
-      const age = mins===0 ? "adesso" : (mins===1 ? "1 min" : (mins + " min"));
-      const disabled = pendingIds.has(r.id) ? "disabled" : "";
-      return `
-      <div class="card waiting">
-        <div class="promo">${getPromoTitle(r.promo_id)}</div>
-        <div class="user">${r.user_email||"OSPITE"}</div>
-        <div class="time">${formatTime(r.created_at)} • in attesa da ${age}</div>
-        <div class="buttons">
-          <button class="approve" ${disabled} onclick="approve('${r.id}','${getPromoTitle(r.promo_id).replace(/'/g,"\'")}')">CONVALIDA</button>
-          <button class="cancel" ${disabled} onclick="cancel('${r.id}','${getPromoTitle(r.promo_id).replace(/'/g,"\'")}')">ANNULLA</button>
-        </div>
-      </div>`;
-    }).join("")}
-  </div>`;
+  ${main}`;
 }
 
 function toggleFocus(){
@@ -404,13 +595,13 @@ function toggleFocus(){
   localStorage.setItem("kiosk_focus", focusMode ? "1":"0");
   document.body.classList.toggle("focus", focusMode);
   // re-render keeps current data view on next poll; immediate refresh:
-  loadRedemptions();
+  renderAll();
 }
 
 async function approve(id, promoTitle=""){
-  if(pendingIds.has(id)) return;
-  pendingIds.add(id);
-  loadRedemptions(); // refresh UI to disable buttons immediately
+  if(pendingPromoIds.has(id)) return;
+  pendingPromoIds.add(id);
+  renderAll(); // refresh UI to disable buttons immediately
   try{
     const { error } = await sb.from("redemptions")
       .update({status:"approved"})
@@ -425,15 +616,15 @@ async function approve(id, promoTitle=""){
     console.error(e);
     showToast("❌ Errore convalida", "bad");
   }finally{
-    pendingIds.delete(id);
-    loadRedemptions();
+    pendingPromoIds.delete(id);
+    renderAll();
   }
 }
 
 async function cancel(id, promoTitle=""){
-  if(pendingIds.has(id)) return;
-  pendingIds.add(id);
-  loadRedemptions();
+  if(pendingPromoIds.has(id)) return;
+  pendingPromoIds.add(id);
+  renderAll();
   try{
     const { error } = await sb.from("redemptions")
       .update({status:"canceled"})
@@ -446,8 +637,8 @@ async function cancel(id, promoTitle=""){
     console.error(e);
     showToast("❌ Errore annulla", "bad");
   }finally{
-    pendingIds.delete(id);
-    loadRedemptions();
+    pendingPromoIds.delete(id);
+    renderAll();
   }
 }
 
