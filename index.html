@@ -129,30 +129,6 @@
         meta.className = "meta";
         meta.textContent = `Codice: ${x.code || "—"} · Stato: ${x.status} · ${new Date(x.created_at).toLocaleString("it-IT")}`;
 
-        // Se manca il titolo promo, permetti allo staff di salvarlo (promo_id -> title)
-        const needsPromoTitle = (kind === "promo") && (!x.promo_title || x.promo_title.startsWith("PROMO ") || x.promo_title === x.promo_id);
-        let editor = null;
-        if (needsPromoTitle) {
-          editor = document.createElement("div");
-          editor.className = "titleEdit";
-          const inp = document.createElement("input");
-          inp.placeholder = "Titolo promo (es. Snooky)";
-          inp.autocomplete = "off";
-          const btn = document.createElement("button");
-          btn.className = "miniBtn";
-          btn.textContent = "Salva";
-          btn.onclick = async () => {
-            const val = inp.value.trim();
-            if (!val) return;
-            btn.disabled = true;
-            const ok = await savePromoTitle(x.promo_id, val);
-            btn.disabled = false;
-            if (ok) await refreshAll();
-          };
-          editor.appendChild(inp);
-          editor.appendChild(btn);
-        }
-
         const btns = document.createElement("div");
         btns.className = "btns";
 
@@ -184,7 +160,6 @@
         card.appendChild(title);
         card.appendChild(sub);
         card.appendChild(meta);
-        if (editor) card.appendChild(editor);
         card.appendChild(btns);
 
         list.appendChild(card);
@@ -237,31 +212,19 @@
         if (error) { alert("Annulla premio fallito: " + error.message); return false; }
         return true;
       }
-
-
-    async function savePromoTitle(promoId, title) {
-      const clean = (title || "").trim();
-      if (!promoId || !clean) return false;
-
-      const { error } = await sb
-        .from("promo_catalog")
-        .upsert({ promo_id: promoId, title: clean }, { onConflict: "promo_id" });
-
-      if (error) {
-        alert("Salvataggio titolo fallito: " + error.message);
-        return false;
-      }
-      showToast("ok", "Titolo salvato");
-      return true;
-    }
-
     }
 
     async function refreshAll() {
-      await loadCounters();
-      const items = await loadQueue(currentTab);
-      renderList(items, currentTab);
-      setLastUpd();
+      try {
+        await loadCounters();
+        const items = await loadQueue(currentTab);
+        renderList(items, currentTab);
+        setLastUpd();
+      } catch (e) {
+        console.error("refreshAll error:", e);
+        // Non bloccare l'app: mostriamo solo che l'ultimo refresh è fallito.
+        el("lastUpdate").textContent = "Refresh KO";
+      }
     }
 
     function setTab(tab) {
@@ -282,35 +245,69 @@
     }
 
     async function showAppOrLogin() {
-      const { data } = await sb.auth.getSession();
-      const session = data?.session;
-
-      if (!session) {
+      // UI helpers (so we never end up "stuck" with everything hidden)
+      const showLoggedOut = (msg) => {
         el("loginBox").style.display = "block";
         el("appBox").style.display = "none";
         el("tabs").style.display = "none";
         el("btnLogout").style.display = "none";
         stopPolling();
-        return;
+        if (msg) el("loginErr").textContent = msg;
+      };
+
+      const showLoggedIn = async () => {
+        el("loginBox").style.display = "none";
+        el("appBox").style.display = "block";
+        el("tabs").style.display = "flex";
+        el("btnLogout").style.display = "inline-block";
+
+        // Non bloccare l'accesso se il refresh fallisce (es. view/policy temporaneamente KO).
+        try {
+          await refreshAll();
+        } catch (e) {
+          console.warn("refreshAll failed on login:", e);
+          // Mostra un avviso in header (senza bloccare).
+          el("lastUpdate").textContent = "Refresh KO";
+        }
+
+        startPolling();
+      };
+
+      try {
+        const { data, error } = await sb.auth.getSession();
+        if (error) {
+          // If something is wrong with the client config, at least show the login UI.
+          showLoggedOut("Errore sessione: " + error.message);
+          return;
+        }
+
+        const session = data?.session;
+        if (!session) {
+          showLoggedOut("");
+          return;
+        }
+
+        // (Opzionale) controllo staff: se la SELECT su profiles è bloccata da RLS,
+        // non blocchiamo il kiosk (ci penseranno le policy UPDATE a proteggere le azioni).
+        // Se invece riusciamo a leggere profiles, richiediamo is_staff=true.
+        const uid = session.user.id;
+        let prof = null;
+        try {
+          const res = await sb.from("profiles").select("is_staff,email").eq("id", uid).maybeSingle();
+          if (!res.error) prof = res.data;
+        } catch (_) {}
+
+        if (prof && prof.is_staff === false) {
+          await sb.auth.signOut();
+          showLoggedOut("Accesso negato: account non staff.");
+          return;
+        }
+
+        await showLoggedIn();
+      } catch (e) {
+        // In case ANY unexpected exception happens, never hide the login.
+        showLoggedOut("Errore imprevisto: " + (e?.message || String(e)));
       }
-
-      // opzionale: controlla is_staff
-      const uid = session.user.id;
-      const { data: prof, error } = await sb.from("profiles").select("is_staff,email").eq("id", uid).maybeSingle();
-      if (error || !prof?.is_staff) {
-        await sb.auth.signOut();
-        el("loginErr").textContent = "Accesso negato: account non staff.";
-        el("loginBox").style.display = "block";
-        return;
-      }
-
-      el("loginBox").style.display = "none";
-      el("appBox").style.display = "block";
-      el("tabs").style.display = "flex";
-      el("btnLogout").style.display = "inline-block";
-
-      await refreshAll();
-      startPolling();
     }
 
     // UI handlers
