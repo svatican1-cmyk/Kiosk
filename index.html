@@ -107,9 +107,9 @@ input{
 <div id="app"></div>
 
 <script>
-const supabase = window.supabase.createClient(
-  "https://cbgwfngseoppybsbbwwo.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNiZ3dmbmdzZW9wcHlic2Jid3dvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4NTk4NDYsImV4cCI6MjA3NTQzNTg0Nn0.5U_4SNDZ18YA7PHY7dH3vZItGp-_XzeQxS1IMAuBQEs"
+const sb = window.supabase.createClient(
+  "YOUR_SUPABASE_URL",
+  "YOUR_SUPABASE_ANON_KEY"
 );
 
 let promotions = [];
@@ -147,13 +147,13 @@ function renderLogin(){
 async function login(){
   const email=document.getElementById("email").value;
   const password=document.getElementById("password").value;
-  const {error}=await supabase.auth.signInWithPassword({email,password});
+  const {error}=await sb.auth.signInWithPassword({email,password});
   if(error){ alert("Login fallito"); return;}
   checkStaff();
 }
 
 async function checkStaff(){
-  const {data:user}=await supabase.auth.getUser();
+  const {data:user}=await sb.auth.getUser();
   if(!user?.user?.email) return renderLogin();
 
   const {data}=await supabase
@@ -164,7 +164,7 @@ async function checkStaff(){
 
   if(!data){
     alert("Non autorizzato");
-    await supabase.auth.signOut();
+    await sb.auth.signOut();
     renderLogin();
   }else{
     startDashboard();
@@ -214,7 +214,7 @@ function renderDashboard(data){
 }
 
 async function approve(id){
-  await supabase.from("redemptions")
+  await sb.from("redemptions")
     .update({status:"approved"})
     .eq("id",id);
 
@@ -224,13 +224,13 @@ async function approve(id){
 }
 
 async function cancel(id){
-  await supabase.from("redemptions")
+  await sb.from("redemptions")
     .update({status:"canceled"})
     .eq("id",id);
   loadRedemptions();
 }
 
-supabase.auth.getSession().then(({data})=>{
+sb.auth.getSession().then(({data})=>{
   if(data.session){
     checkStaff();
   }else{
