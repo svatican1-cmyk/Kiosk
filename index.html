@@ -37,7 +37,16 @@
       background: rgba(255,255,255,0.06); color: #fff; font-size: 16px; }
     .err { margin-top: 10px; color: #ffb4b4; white-space: pre-wrap; }
     .muted { opacity: 0.7; font-size: 12px; }
-  </style>
+  
+    .titleEditor { margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.12); }
+    .titleHint { font-size: 12px; opacity: 0.75; margin-bottom: 8px; }
+    .titleRow { display: flex; gap: 10px; align-items: center; }
+    .titleRow input { flex: 1; padding: 10px 12px; border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: #fff; font-size: 15px; }
+    .btn.save { padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.10); color: #fff; font-weight: 600; }
+    .btn.save:disabled { opacity: 0.6; }
+</style>
 </head>
 <body>
   <header>
@@ -125,6 +134,57 @@
         sub.className = "sub";
         sub.textContent = x.customer_label || "Ospite";
 
+        // Se non abbiamo ancora un titolo "umano" per questa promo, permettiamo allo staff di salvarlo (promo_catalog)
+        if (kind === "promo") {
+          const pt = (x.promo_title || "").trim();
+          const isFallback = pt.startsWith("PROMO ") || pt === "" || pt === x.promo_id;
+          if (isFallback) {
+            const editor = document.createElement("div");
+            editor.className = "titleEditor";
+
+            const hint = document.createElement("div");
+            hint.className = "titleHint";
+            hint.textContent = "Titolo promo mancante: scrivilo una volta e verrà mostrato sempre.";
+
+            const row = document.createElement("div");
+            row.className = "titleRow";
+
+            const inp = document.createElement("input");
+            inp.type = "text";
+            inp.placeholder = "Es. Snooky";
+            inp.value = "";
+            inp.autocomplete = "off";
+
+            const btn = document.createElement("button");
+            btn.className = "btn save";
+            btn.type = "button";
+            btn.textContent = "Salva titolo";
+
+            btn.onclick = async () => {
+              const val = (inp.value || "").trim();
+              if (!val) { alert("Inserisci un titolo."); return; }
+              btn.disabled = true;
+              try {
+                const { error } = await sb.from("promo_catalog")
+                  .upsert({ promo_id: x.promo_id, title: val }, { onConflict: "promo_id" });
+                if (error) throw error;
+                await refresh();
+              } catch (e) {
+                alert("Salvataggio titolo fallito: " + (e?.message || e));
+              } finally {
+                btn.disabled = false;
+              }
+            };
+
+            row.appendChild(inp);
+            row.appendChild(btn);
+
+            editor.appendChild(hint);
+            editor.appendChild(row);
+            card.appendChild(editor);
+          }
+        }
+
         const meta = document.createElement("div");
         meta.className = "meta";
         meta.textContent = `Codice: ${x.code || "—"} · Stato: ${x.status} · ${new Date(x.created_at).toLocaleString("it-IT")}`;
@@ -199,14 +259,14 @@
     async function reject(kind, id) {
       if (kind === "promo") {
         const { error } = await sb.from("redemptions")
-          .update({ status: "rejected" })
+          .update({ status: "canceled" })
           .eq("id", id)
           .eq("status", "waiting");
         if (error) { alert("Annulla promo fallito: " + error.message); return false; }
         return true;
       } else {
         const { error } = await sb.from("loyalty_reward_redemptions")
-          .update({ status: "rejected" })
+          .update({ status: "canceled" })
           .eq("id", id)
           .in("status", ["waiting","pending"]);
         if (error) { alert("Annulla premio fallito: " + error.message); return false; }
