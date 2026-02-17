@@ -28,50 +28,18 @@
     .ok { background: #1c7d3a; color: #fff; }
     .no { background: #9d2b2b; color: #fff; }
     .ghost { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.12); }
-    .blink { animation: blinkBorder 1s infinite; border: 2px solid rgba(220, 38, 38, 0.25); }
-@keyframes blinkBorder {
-  0%,100% { border-color: rgba(220, 38, 38, 0.25); box-shadow: 0 0 0 rgba(220,38,38,0); }
-  50% { border-color: rgba(220, 38, 38, 0.95); box-shadow: 0 0 18px rgba(220,38,38,0.25); }
-}
-50% { box-shadow: 0 0 24px rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.28); } }
+    .blink { animation: blink 1s infinite; }
+    @keyframes blink { 0%,100% { box-shadow: 0 0 0 rgba(255,255,255,0); border-color: rgba(255,255,255,0.10); }
+                      50% { box-shadow: 0 0 24px rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.28); } }
     .login { max-width: 520px; margin: 40px auto; padding: 16px; }
     .field { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
     input { padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.18);
       background: rgba(255,255,255,0.06); color: #fff; font-size: 16px; }
     .err { margin-top: 10px; color: #ffb4b4; white-space: pre-wrap; }
     .muted { opacity: 0.7; font-size: 12px; }
-
-    .toast {
-      position: fixed;
-      left: 50%;
-      top: 18px;
-      transform: translateX(-50%);
-      background: rgba(255,255,255,0.95);
-      color: #111827;
-      border: 1px solid rgba(17,24,39,0.12);
-      border-radius: 999px;
-      padding: 10px 14px;
-      display: none;
-      align-items: center;
-      gap: 10px;
-      box-shadow: 0 12px 30px rgba(0,0,0,0.18);
-      z-index: 9999;
-      font-weight: 800;
-    }
-    .toast.show { display: flex; animation: toastPop 0.22s ease-out; }
-    .toast .icon {
-      width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; color: #fff;
-      font-weight: 900;
-    }
-    .toast.ok .icon { background: #15803d; }
-    .toast.no .icon { background: #b91c1c; }
-    @keyframes toastPop { from { transform: translateX(-50%) translateY(-8px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
-
   </style>
 </head>
 <body>
-  <div id="toast" class="toast"><div class="icon" id="toastIcon">✓</div><div id="toastText">Ok</div></div>
-
   <header>
     <div class="row">
       <div class="pill">Promo approvate oggi: <strong id="cPromo">–</strong></div>
@@ -126,44 +94,10 @@
     let currentTab = "promo";
     let pollTimer = null;
 
-function isRecent(tsIso, days) {
-  try {
-    const t = new Date(tsIso).getTime();
-    if (!Number.isFinite(t)) return false;
-    const now = Date.now();
-    return t >= (now - days * 24 * 60 * 60 * 1000);
-  } catch { return false; }
-}
-
-function isNotExpired(expiresIso) {
-  if (!expiresIso) return true;
-  const t = new Date(expiresIso).getTime();
-  if (!Number.isFinite(t)) return true;
-  return t > Date.now();
-}
-
-
     function setLastUpd() {
       const d = new Date();
       el("lastUpd").textContent = d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     }
-
-    
-    let toastTimer = null;
-    function showToast(kind, text) {
-      const t = el("toast");
-      const icon = el("toastIcon");
-      const txt = el("toastText");
-      if (!t || !icon || !txt) return;
-      t.classList.remove("ok","no","show");
-      t.classList.add(kind === "ok" ? "ok" : "no");
-      icon.textContent = kind === "ok" ? "✓" : "✕";
-      txt.textContent = text;
-      t.classList.add("show");
-      if (toastTimer) clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => t.classList.remove("show"), 650);
-    }
-
 
     async function loadCounters() {
       const { data, error } = await sb.from("kiosk_daily_counters").select("*").limit(1).maybeSingle();
@@ -181,7 +115,7 @@ function isNotExpired(expiresIso) {
 
       for (const x of items) {
         const card = document.createElement("div");
-        card.className = "card" + ((x.status === "waiting" || x.status === "pending") ? " blink" : ""); // lampeggia finché è in lista pending
+        card.className = "card blink"; // lampeggia finché è in lista pending
 
         const title = document.createElement("div");
         title.className = "title";
@@ -194,6 +128,30 @@ function isNotExpired(expiresIso) {
         const meta = document.createElement("div");
         meta.className = "meta";
         meta.textContent = `Codice: ${x.code || "—"} · Stato: ${x.status} · ${new Date(x.created_at).toLocaleString("it-IT")}`;
+
+        // Se manca il titolo promo, permetti allo staff di salvarlo (promo_id -> title)
+        const needsPromoTitle = (kind === "promo") && (!x.promo_title || x.promo_title.startsWith("PROMO ") || x.promo_title === x.promo_id);
+        let editor = null;
+        if (needsPromoTitle) {
+          editor = document.createElement("div");
+          editor.className = "titleEdit";
+          const inp = document.createElement("input");
+          inp.placeholder = "Titolo promo (es. Snooky)";
+          inp.autocomplete = "off";
+          const btn = document.createElement("button");
+          btn.className = "miniBtn";
+          btn.textContent = "Salva";
+          btn.onclick = async () => {
+            const val = inp.value.trim();
+            if (!val) return;
+            btn.disabled = true;
+            const ok = await savePromoTitle(x.promo_id, val);
+            btn.disabled = false;
+            if (ok) await refreshAll();
+          };
+          editor.appendChild(inp);
+          editor.appendChild(btn);
+        }
 
         const btns = document.createElement("div");
         btns.className = "btns";
@@ -226,6 +184,7 @@ function isNotExpired(expiresIso) {
         card.appendChild(title);
         card.appendChild(sub);
         card.appendChild(meta);
+        if (editor) card.appendChild(editor);
         card.appendChild(btns);
 
         list.appendChild(card);
@@ -236,9 +195,7 @@ function isNotExpired(expiresIso) {
       if (kind === "promo") {
         const { data, error } = await sb.from("kiosk_pending_promos").select("*");
         if (error) { alert("Errore promo: " + error.message); return []; }
-        const rows = data || [];
-        // evita promo "storiche" che l’app principale non mostra
-        return rows.filter(r => isRecent(r.created_at, 30) && isNotExpired(r.expires_at));
+        return data || [];
       } else {
         const { data, error } = await sb.from("kiosk_pending_rewards").select("*");
         if (error) { alert("Errore premi: " + error.message); return []; }
@@ -253,7 +210,6 @@ function isNotExpired(expiresIso) {
           .eq("id", id)
           .eq("status", "waiting");
         if (error) { alert("Convalida promo fallita: " + error.message); return false; }
-        showToast("ok","Promo convalidata");
         return true;
       } else {
         const { error } = await sb.from("loyalty_reward_redemptions")
@@ -261,7 +217,6 @@ function isNotExpired(expiresIso) {
           .eq("id", id)
           .in("status", ["waiting","pending"]);
         if (error) { alert("Convalida premio fallita: " + error.message); return false; }
-        showToast("ok","Premio convalidato");
         return true;
       }
     }
@@ -269,21 +224,37 @@ function isNotExpired(expiresIso) {
     async function reject(kind, id) {
       if (kind === "promo") {
         const { error } = await sb.from("redemptions")
-          .update({ status: "canceled" })
+          .update({ status: "rejected" })
           .eq("id", id)
           .eq("status", "waiting");
         if (error) { alert("Annulla promo fallito: " + error.message); return false; }
-        showToast("no","Promo annullata");
         return true;
       } else {
         const { error } = await sb.from("loyalty_reward_redemptions")
-          .update({ status: "canceled" })
+          .update({ status: "rejected" })
           .eq("id", id)
           .in("status", ["waiting","pending"]);
         if (error) { alert("Annulla premio fallito: " + error.message); return false; }
-        showToast("no","Premio annullato");
         return true;
       }
+
+
+    async function savePromoTitle(promoId, title) {
+      const clean = (title || "").trim();
+      if (!promoId || !clean) return false;
+
+      const { error } = await sb
+        .from("promo_catalog")
+        .upsert({ promo_id: promoId, title: clean }, { onConflict: "promo_id" });
+
+      if (error) {
+        alert("Salvataggio titolo fallito: " + error.message);
+        return false;
+      }
+      showToast("ok", "Titolo salvato");
+      return true;
+    }
+
     }
 
     async function refreshAll() {
@@ -311,60 +282,35 @@ function isNotExpired(expiresIso) {
     }
 
     async function showAppOrLogin() {
-      // UI helpers (so we never end up "stuck" with everything hidden)
-      const showLoggedOut = (msg) => {
+      const { data } = await sb.auth.getSession();
+      const session = data?.session;
+
+      if (!session) {
         el("loginBox").style.display = "block";
         el("appBox").style.display = "none";
         el("tabs").style.display = "none";
         el("btnLogout").style.display = "none";
         stopPolling();
-        if (msg) el("loginErr").textContent = msg;
-      };
-
-      const showLoggedIn = async () => {
-        el("loginBox").style.display = "none";
-        el("appBox").style.display = "block";
-        el("tabs").style.display = "flex";
-        el("btnLogout").style.display = "inline-block";
-        await refreshAll();
-        startPolling();
-      };
-
-      try {
-        const { data, error } = await sb.auth.getSession();
-        if (error) {
-          // If something is wrong with the client config, at least show the login UI.
-          showLoggedOut("Errore sessione: " + error.message);
-          return;
-        }
-
-        const session = data?.session;
-        if (!session) {
-          showLoggedOut("");
-          return;
-        }
-
-        // (Opzionale) controllo staff: se la SELECT su profiles è bloccata da RLS,
-        // non blocchiamo il kiosk (ci penseranno le policy UPDATE a proteggere le azioni).
-        // Se invece riusciamo a leggere profiles, richiediamo is_staff=true.
-        const uid = session.user.id;
-        let prof = null;
-        try {
-          const res = await sb.from("profiles").select("is_staff,email").eq("id", uid).maybeSingle();
-          if (!res.error) prof = res.data;
-        } catch (_) {}
-
-        if (prof && prof.is_staff === false) {
-          await sb.auth.signOut();
-          showLoggedOut("Accesso negato: account non staff.");
-          return;
-        }
-
-        await showLoggedIn();
-      } catch (e) {
-        // In case ANY unexpected exception happens, never hide the login.
-        showLoggedOut("Errore imprevisto: " + (e?.message || String(e)));
+        return;
       }
+
+      // opzionale: controlla is_staff
+      const uid = session.user.id;
+      const { data: prof, error } = await sb.from("profiles").select("is_staff,email").eq("id", uid).maybeSingle();
+      if (error || !prof?.is_staff) {
+        await sb.auth.signOut();
+        el("loginErr").textContent = "Accesso negato: account non staff.";
+        el("loginBox").style.display = "block";
+        return;
+      }
+
+      el("loginBox").style.display = "none";
+      el("appBox").style.display = "block";
+      el("tabs").style.display = "flex";
+      el("btnLogout").style.display = "inline-block";
+
+      await refreshAll();
+      startPolling();
     }
 
     // UI handlers
@@ -373,7 +319,7 @@ function isNotExpired(expiresIso) {
       if (t) setTab(t.dataset.tab);
     });
 
-    el("btnRefresh").addEventListener("click", (e)=>{ e.preventDefault(); refreshAll(); });
+    el("btnRefresh").onclick = refreshAll;
 
     el("btnLogout").onclick = async () => {
       await sb.auth.signOut();
