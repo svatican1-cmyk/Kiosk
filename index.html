@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gelato Club Kiosk</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 body{
   margin:0;
@@ -232,6 +233,22 @@ button:disabled{
   font-weight:900;
 }
 
+/* Usage chart */
+.chartWrap{
+  margin-top:12px;
+  background:rgba(15,23,42,0.45);
+  border:1px solid rgba(148,163,184,0.18);
+  border-radius:14px;
+  padding:12px;
+}
+.chartMeta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:10px;
+}
+.chartMeta .badge{ background:rgba(15,23,42,0.45); }
+
 </style>
 </head>
 <body>
@@ -264,6 +281,19 @@ let online = true;
 let lastError = "";
 let promoRows = [];
 let rewardRows = [];
+
+// Usage stats (Option 3: KPI from DB)
+let usageStats = {
+  ready:false,
+  redeemsToday:0,
+  redeemsTotal:0,
+  usersToday:0,
+  labels:[],
+  redeemsSeries:[],
+  usersSeries:[]
+};
+let usageChart = null;
+let lastUsageFetch = 0;
 
 
 async function loadPromotions(){
@@ -313,6 +343,164 @@ function formatDateTime(ts){
   return new Date(ts).toLocaleString("it-IT",{hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"});
 }
 
+function dateKeyLocal(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const day = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function startOfTodayLocalISO(){
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0,0);
+  return start.toISOString();
+}
+function startOfNDaysAgoLocalISO(daysAgo){
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0,0);
+  start.setDate(start.getDate() - daysAgo);
+  return start.toISOString();
+}
+
+async function loadUsageStats(force=false){
+  // keep it light: refresh max every 30s (or forced)
+  const nowMs = Date.now();
+  if(!force && (nowMs - lastUsageFetch) < 30000) return;
+  lastUsageFetch = nowMs;
+
+  try{
+    const sinceISO = startOfNDaysAgoLocalISO(13); // last 14 days incl today
+    const todayISO = startOfTodayLocalISO();
+
+    // Totals (count only, no rows)
+    const { count: totalApproved, error: eTot } = await sb
+      .from("redemptions")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "approved");
+    if(eTot) throw eTot;
+
+    const { count: todayApproved, error: eToday } = await sb
+      .from("redemptions")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "approved")
+      .gte("created_at", todayISO);
+    if(eToday) throw eToday;
+
+    // Series: approved redemptions last 14 days
+    const { data: redRows, error: eRed } = await sb
+      .from("redemptions")
+      .select("created_at")
+      .eq("status", "approved")
+      .gte("created_at", sinceISO)
+      .limit(5000);
+    if(eRed) throw eRed;
+
+    // Users series: profiles created last 14 days
+    const { data: userRows, error: eUsr } = await sb
+      .from("profiles")
+      .select("created_at")
+      .gte("created_at", sinceISO)
+      .limit(5000);
+    if(eUsr) throw eUsr;
+
+    // Users today
+    const { count: usersToday, error: eUsersToday } = await sb
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", todayISO);
+    if(eUsersToday) throw eUsersToday;
+
+    // Build day buckets
+    const labels = [];
+    const redeemsMap = {};
+    const usersMap = {};
+
+    for(let i=13;i>=0;i--){
+      const d = new Date();
+      d.setHours(0,0,0,0);
+      d.setDate(d.getDate()-i);
+      const key = dateKeyLocal(d);
+      labels.push(key);
+      redeemsMap[key]=0;
+      usersMap[key]=0;
+    }
+
+    (redRows||[]).forEach(r=>{
+      const key = dateKeyLocal(new Date(r.created_at));
+      if(redeemsMap[key] !== undefined) redeemsMap[key]++;
+    });
+    (userRows||[]).forEach(r=>{
+      const key = dateKeyLocal(new Date(r.created_at));
+      if(usersMap[key] !== undefined) usersMap[key]++;
+    });
+
+    usageStats = {
+      ready:true,
+      redeemsToday: todayApproved || 0,
+      redeemsTotal: totalApproved || 0,
+      usersToday: usersToday || 0,
+      labels,
+      redeemsSeries: labels.map(k=>redeemsMap[k]||0),
+      usersSeries: labels.map(k=>usersMap[k]||0)
+    };
+
+    // refresh UI bits + chart if visible
+    renderAll();
+  }catch(e){
+    console.error(e);
+    // don't break kiosk if stats fail
+  }
+}
+
+function ensureUsageChart(){
+  const canvas = document.getElementById("usageChart");
+  if(!canvas) return;
+  if(!usageStats?.ready) return;
+
+  // If UI re-rendered, the <canvas> element is new. Recreate chart in that case.
+  if(usageChart && usageChart.canvas !== canvas){
+    try{ usageChart.destroy(); }catch(e){}
+    usageChart = null;
+  }
+
+  const data = {
+    labels: usageStats.labels,
+    datasets: [
+      {
+        label: "Riscatti approvati",
+        data: usageStats.redeemsSeries,
+        tension: 0.25,
+      },
+      {
+        label: "Nuovi utenti",
+        data: usageStats.usersSeries,
+        tension: 0.25,
+      }
+    ]
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: "#e5e7eb", font: { weight: "700" } } },
+      tooltip: { enabled: true }
+    },
+    scales: {
+      x: { ticks: { color: "rgba(229,231,235,0.75)", maxRotation: 0, autoSkip: true }, grid: { color: "rgba(148,163,184,0.08)" } },
+      y: { ticks: { color: "rgba(229,231,235,0.75)" }, grid: { color: "rgba(148,163,184,0.08)" }, beginAtZero: true }
+    }
+  };
+
+  if(usageChart){
+    usageChart.data = data;
+    usageChart.options = options;
+    usageChart.update();
+  }else{
+    const ctx = canvas.getContext("2d");
+    usageChart = new Chart(ctx, { type: "line", data, options });
+  }
+}
+
 
 
 function renderLogin(){
@@ -356,8 +544,10 @@ async function startDashboard(){
   document.body.classList.toggle("focus", focusMode);
   try{ await loadPromotions(); }catch(e){ console.error(e); alert(String(e.message||e)); return; }
   setInterval(()=>{ loadRedemptions(); loadRewards(); },2000);
+  setInterval(()=>{ loadUsageStats(false); },30000);
   renderAll();
   loadRewards();
+  loadUsageStats(true);
 }
 
 async function loadRedemptions(){
@@ -565,6 +755,30 @@ function renderDashboard(data){
 
   const main = (activeTab === "rewards") ? rewardsList : promoList;
 
+  const usageBadges = usageStats?.ready ? `
+    <div class="badge">Oggi riscatti: <b>${usageStats.redeemsToday}</b></div>
+    <div class="badge">Oggi utenti: <b>${usageStats.usersToday}</b></div>
+  ` : `
+    <div class="badge">Oggi riscatti: <b>—</b></div>
+    <div class="badge">Oggi utenti: <b>—</b></div>
+  `;
+
+  const usageCard = `
+    <div class="container">
+      <div class="card">
+        <div class="promo">Utilizzo App</div>
+        <div class="small">Ultimi 14 giorni • Riscatti totali approvati: <b>${usageStats?.ready ? usageStats.redeemsTotal : "—"}</b></div>
+        <div class="chartMeta">
+          <div class="badge">Riscatti oggi: <b>${usageStats?.ready ? usageStats.redeemsToday : "—"}</b></div>
+          <div class="badge">Nuovi utenti oggi: <b>${usageStats?.ready ? usageStats.usersToday : "—"}</b></div>
+        </div>
+        <div class="chartWrap" style="height:260px;">
+          <canvas id="usageChart"></canvas>
+        </div>
+      </div>
+    </div>
+  `;
+
   document.getElementById("app").innerHTML=`
   <div class="header">
     <div class="title" style="text-align:center;">Kiosk</div>
@@ -576,6 +790,7 @@ function renderDashboard(data){
       <div class="badge"><span class="${dotClass}"></span>${statusLabel}</div>
       <div class="badge">Promo: ${waitingCount}</div>
       <div class="badge">Premi: ${rewardWaiting}</div>
+      ${usageBadges}
       <div class="badge">Totale: ${totalCount}</div>
 
       <div class="toggle ${focusMode ? "on":""}" onclick="toggleFocus()">
@@ -587,7 +802,11 @@ function renderDashboard(data){
     ${errText}
   </div>
 
-  ${main}`;
+  ${main}
+  ${usageCard}`;
+
+  // chart init/update after DOM is in place
+  requestAnimationFrame(()=>ensureUsageChart());
 }
 
 function toggleFocus(){
