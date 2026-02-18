@@ -249,6 +249,27 @@ button:disabled{
 }
 .chartMeta .badge{ background:rgba(15,23,42,0.45); }
 
+/* Usage charts layout */
+.chartGrid{
+  margin-top:12px;
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:12px;
+}
+@media (max-width: 900px){
+  .chartGrid{ grid-template-columns: 1fr; }
+}
+.updatePill{
+  margin-left:auto;
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:13px;
+  font-weight:800;
+  border:1px solid rgba(148,163,184,0.18);
+  background:rgba(15,23,42,0.35);
+  opacity:0.9;
+}
+
 </style>
 </head>
 <body>
@@ -285,14 +306,19 @@ let rewardRows = [];
 // Usage stats (Option 3: KPI from DB)
 let usageStats = {
   ready:false,
+  updatedAt:null,
   redeemsToday:0,
   redeemsTotal:0,
+  rewardsToday:0,
+  rewardsTotal:0,
   usersToday:0,
   labels:[],
   redeemsSeries:[],
+  rewardsSeries:[],
   usersSeries:[]
 };
-let usageChart = null;
+let usageChartUsers = null;
+let usageChartPromoRewards = null;
 let lastUsageFetch = 0;
 
 
@@ -371,28 +397,51 @@ async function loadUsageStats(force=false){
     const sinceISO = startOfNDaysAgoLocalISO(13); // last 14 days incl today
     const todayISO = startOfTodayLocalISO();
 
-    // Totals (count only, no rows)
-    const { count: totalApproved, error: eTot } = await sb
+    // Promo redemptions totals
+    const { count: totalPromoApproved, error: eTot } = await sb
       .from("redemptions")
       .select("id", { count: "exact", head: true })
       .eq("status", "approved");
     if(eTot) throw eTot;
 
-    const { count: todayApproved, error: eToday } = await sb
+    const { count: todayPromoApproved, error: eToday } = await sb
       .from("redemptions")
       .select("id", { count: "exact", head: true })
       .eq("status", "approved")
       .gte("created_at", todayISO);
     if(eToday) throw eToday;
 
-    // Series: approved redemptions last 14 days
-    const { data: redRows, error: eRed } = await sb
+    // Rewards totals
+    const { count: totalRewardsApproved, error: eRTot } = await sb
+      .from("loyalty_reward_redemptions")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "approved");
+    if(eRTot) throw eRTot;
+
+    const { count: todayRewardsApproved, error: eRToday } = await sb
+      .from("loyalty_reward_redemptions")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "approved")
+      .gte("created_at", todayISO);
+    if(eRToday) throw eRToday;
+
+    // Series: promo approved last 14 days
+    const { data: promoRows, error: ePromo } = await sb
       .from("redemptions")
       .select("created_at")
       .eq("status", "approved")
       .gte("created_at", sinceISO)
       .limit(5000);
-    if(eRed) throw eRed;
+    if(ePromo) throw ePromo;
+
+    // Series: rewards approved last 14 days
+    const { data: rewardsRows, error: eRewards } = await sb
+      .from("loyalty_reward_redemptions")
+      .select("created_at")
+      .eq("status", "approved")
+      .gte("created_at", sinceISO)
+      .limit(5000);
+    if(eRewards) throw eRewards;
 
     // Users series: profiles created last 14 days
     const { data: userRows, error: eUsr } = await sb
@@ -411,7 +460,8 @@ async function loadUsageStats(force=false){
 
     // Build day buckets
     const labels = [];
-    const redeemsMap = {};
+    const promoMap = {};
+    const rewardsMap = {};
     const usersMap = {};
 
     for(let i=13;i>=0;i--){
@@ -420,13 +470,18 @@ async function loadUsageStats(force=false){
       d.setDate(d.getDate()-i);
       const key = dateKeyLocal(d);
       labels.push(key);
-      redeemsMap[key]=0;
+      promoMap[key]=0;
+      rewardsMap[key]=0;
       usersMap[key]=0;
     }
 
-    (redRows||[]).forEach(r=>{
+    (promoRows||[]).forEach(r=>{
       const key = dateKeyLocal(new Date(r.created_at));
-      if(redeemsMap[key] !== undefined) redeemsMap[key]++;
+      if(promoMap[key] !== undefined) promoMap[key]++;
+    });
+    (rewardsRows||[]).forEach(r=>{
+      const key = dateKeyLocal(new Date(r.created_at));
+      if(rewardsMap[key] !== undefined) rewardsMap[key]++;
     });
     (userRows||[]).forEach(r=>{
       const key = dateKeyLocal(new Date(r.created_at));
@@ -435,11 +490,15 @@ async function loadUsageStats(force=false){
 
     usageStats = {
       ready:true,
-      redeemsToday: todayApproved || 0,
-      redeemsTotal: totalApproved || 0,
+      updatedAt: new Date().toISOString(),
+      redeemsToday: todayPromoApproved || 0,
+      redeemsTotal: totalPromoApproved || 0,
+      rewardsToday: todayRewardsApproved || 0,
+      rewardsTotal: totalRewardsApproved || 0,
       usersToday: usersToday || 0,
       labels,
-      redeemsSeries: labels.map(k=>redeemsMap[k]||0),
+      redeemsSeries: labels.map(k=>promoMap[k]||0),
+      rewardsSeries: labels.map(k=>rewardsMap[k]||0),
       usersSeries: labels.map(k=>usersMap[k]||0)
     };
 
@@ -451,34 +510,24 @@ async function loadUsageStats(force=false){
   }
 }
 
-function ensureUsageChart(){
-  const canvas = document.getElementById("usageChart");
-  if(!canvas) return;
+function ensureUsageCharts(){
   if(!usageStats?.ready) return;
 
-  // If UI re-rendered, the <canvas> element is new. Recreate chart in that case.
-  if(usageChart && usageChart.canvas !== canvas){
-    try{ usageChart.destroy(); }catch(e){}
-    usageChart = null;
+  const canvasUsers = document.getElementById("usageChartUsers");
+  const canvasPR = document.getElementById("usageChartPromoRewards");
+
+  // If UI re-rendered, canvases may be new. Recreate charts accordingly.
+  if(usageChartUsers && canvasUsers && usageChartUsers.canvas !== canvasUsers){
+    try{ usageChartUsers.destroy(); }catch(e){}
+    usageChartUsers = null;
+  }
+  if(usageChartPromoRewards && canvasPR && usageChartPromoRewards.canvas !== canvasPR){
+    try{ usageChartPromoRewards.destroy(); }catch(e){}
+    usageChartPromoRewards = null;
   }
 
-  const data = {
-    labels: usageStats.labels,
-    datasets: [
-      {
-        label: "Riscatti approvati",
-        data: usageStats.redeemsSeries,
-        tension: 0.25,
-      },
-      {
-        label: "Nuovi utenti",
-        data: usageStats.usersSeries,
-        tension: 0.25,
-      }
-    ]
-  };
-
-  const options = {
+  // Shared options
+  const baseOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -488,16 +537,59 @@ function ensureUsageChart(){
     scales: {
       x: { ticks: { color: "rgba(229,231,235,0.75)", maxRotation: 0, autoSkip: true }, grid: { color: "rgba(148,163,184,0.08)" } },
       y: { ticks: { color: "rgba(229,231,235,0.75)" }, grid: { color: "rgba(148,163,184,0.08)" }, beginAtZero: true }
-    }
+    },
+    elements: { line: { tension: 0.35 } } // onda
   };
 
-  if(usageChart){
-    usageChart.data = data;
-    usageChart.options = options;
-    usageChart.update();
-  }else{
-    const ctx = canvas.getContext("2d");
-    usageChart = new Chart(ctx, { type: "line", data, options });
+  // Chart 1: Users
+  if(canvasUsers){
+    const dataUsers = {
+      labels: usageStats.labels,
+      datasets: [
+        {
+          label: "Nuovi utenti",
+          data: usageStats.usersSeries,
+          fill: false
+        }
+      ]
+    };
+
+    if(usageChartUsers){
+      usageChartUsers.data = dataUsers;
+      usageChartUsers.options = baseOptions;
+      usageChartUsers.update();
+    }else{
+      const ctx = canvasUsers.getContext("2d");
+      usageChartUsers = new Chart(ctx, { type: "line", data: dataUsers, options: baseOptions });
+    }
+  }
+
+  // Chart 2: Promo + Rewards
+  if(canvasPR){
+    const dataPR = {
+      labels: usageStats.labels,
+      datasets: [
+        {
+          label: "Riscatti promo (approvati)",
+          data: usageStats.redeemsSeries,
+          fill: false
+        },
+        {
+          label: "Riscatti premi (approvati)",
+          data: usageStats.rewardsSeries,
+          fill: false
+        }
+      ]
+    };
+
+    if(usageChartPromoRewards){
+      usageChartPromoRewards.data = dataPR;
+      usageChartPromoRewards.options = baseOptions;
+      usageChartPromoRewards.update();
+    }else{
+      const ctx = canvasPR.getContext("2d");
+      usageChartPromoRewards = new Chart(ctx, { type: "line", data: dataPR, options: baseOptions });
+    }
   }
 }
 
@@ -755,29 +847,44 @@ function renderDashboard(data){
 
   const main = (activeTab === "rewards") ? rewardsList : promoList;
 
-  const usageBadges = usageStats?.ready ? `
-    <div class="badge">Oggi riscatti: <b>${usageStats.redeemsToday}</b></div>
-    <div class="badge">Oggi utenti: <b>${usageStats.usersToday}</b></div>
-  ` : `
-    <div class="badge">Oggi riscatti: <b>—</b></div>
-    <div class="badge">Oggi utenti: <b>—</b></div>
-  `;
+  const updatedLabel = (usageStats?.ready && usageStats.updatedAt)
+    ? new Date(usageStats.updatedAt).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit",second:"2-digit"})
+    : "—";
 
   const usageCard = `
     <div class="container">
       <div class="card">
-        <div class="promo">Utilizzo App</div>
-        <div class="small">Ultimi 14 giorni • Riscatti totali approvati: <b>${usageStats?.ready ? usageStats.redeemsTotal : "—"}</b></div>
-        <div class="chartMeta">
-          <div class="badge">Riscatti oggi: <b>${usageStats?.ready ? usageStats.redeemsToday : "—"}</b></div>
-          <div class="badge">Nuovi utenti oggi: <b>${usageStats?.ready ? usageStats.usersToday : "—"}</b></div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="promo">Utilizzo App</div>
+          <div class="updatePill">Aggiornato: <b>${updatedLabel}</b></div>
         </div>
-        <div class="chartWrap" style="height:260px;">
-          <canvas id="usageChart"></canvas>
+
+        <div class="small">
+          Ultimi 14 giorni • Promo approvate: <b>${usageStats?.ready ? usageStats.redeemsTotal : "—"}</b> •
+          Premi approvati: <b>${usageStats?.ready ? usageStats.rewardsTotal : "—"}</b>
+        </div>
+
+        <div class="chartMeta">
+          <div class="badge">Riscatti promo: <b>${usageStats?.ready ? usageStats.redeemsToday : "—"}</b></div>
+          <div class="badge">Riscatti premi: <b>${usageStats?.ready ? usageStats.rewardsToday : "—"}</b></div>
+          <div class="badge">Nuovi utenti: <b>${usageStats?.ready ? usageStats.usersToday : "—"}</b></div>
+        </div>
+
+        <div class="chartGrid">
+          <div class="chartWrap" style="height:240px;">
+            <div class="small" style="margin:0 0 8px 2px; opacity:0.85;"><b>Nuovi utenti</b> (per giorno)</div>
+            <canvas id="usageChartUsers"></canvas>
+          </div>
+
+          <div class="chartWrap" style="height:240px;">
+            <div class="small" style="margin:0 0 8px 2px; opacity:0.85;"><b>Promo & Premi</b> (approvati per giorno)</div>
+            <canvas id="usageChartPromoRewards"></canvas>
+          </div>
         </div>
       </div>
     </div>
   `;
+
 
   document.getElementById("app").innerHTML=`
   <div class="header">
@@ -790,7 +897,6 @@ function renderDashboard(data){
       <div class="badge"><span class="${dotClass}"></span>${statusLabel}</div>
       <div class="badge">Promo: ${waitingCount}</div>
       <div class="badge">Premi: ${rewardWaiting}</div>
-      ${usageBadges}
       <div class="badge">Totale: ${totalCount}</div>
 
       <div class="toggle ${focusMode ? "on":""}" onclick="toggleFocus()">
@@ -806,7 +912,7 @@ function renderDashboard(data){
   ${usageCard}`;
 
   // chart init/update after DOM is in place
-  requestAnimationFrame(()=>ensureUsageChart());
+  requestAnimationFrame(()=>ensureUsageCharts());
 }
 
 function toggleFocus(){
