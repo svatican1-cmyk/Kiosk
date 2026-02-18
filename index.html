@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gelato Club Kiosk</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 body{
   margin:0;
@@ -233,43 +232,6 @@ button:disabled{
   font-weight:900;
 }
 
-/* Usage chart */
-.chartWrap{
-  margin-top:12px;
-  background:rgba(15,23,42,0.45);
-  border:1px solid rgba(148,163,184,0.18);
-  border-radius:14px;
-  padding:12px;
-}
-.chartMeta{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-  margin-top:10px;
-}
-.chartMeta .badge{ background:rgba(15,23,42,0.45); }
-
-/* Usage charts layout */
-.chartGrid{
-  margin-top:12px;
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap:12px;
-}
-@media (max-width: 900px){
-  .chartGrid{ grid-template-columns: 1fr; }
-}
-.updatePill{
-  margin-left:auto;
-  padding:6px 10px;
-  border-radius:999px;
-  font-size:13px;
-  font-weight:800;
-  border:1px solid rgba(148,163,184,0.18);
-  background:rgba(15,23,42,0.35);
-  opacity:0.9;
-}
-
 </style>
 </head>
 <body>
@@ -302,24 +264,6 @@ let online = true;
 let lastError = "";
 let promoRows = [];
 let rewardRows = [];
-
-// Usage stats (Option 3: KPI from DB)
-let usageStats = {
-  ready:false,
-  updatedAt:null,
-  redeemsToday:0,
-  redeemsTotal:0,
-  rewardsToday:0,
-  rewardsTotal:0,
-  usersToday:0,
-  labels:[],
-  redeemsSeries:[],
-  rewardsSeries:[],
-  usersSeries:[]
-};
-let usageChartUsers = null;
-let usageChartPromoRewards = null;
-let lastUsageFetch = 0;
 
 
 async function loadPromotions(){
@@ -369,230 +313,6 @@ function formatDateTime(ts){
   return new Date(ts).toLocaleString("it-IT",{hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"});
 }
 
-function dateKeyLocal(d){
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,"0");
-  const day = String(d.getDate()).padStart(2,"0");
-  return `${y}-${m}-${day}`;
-}
-function startOfTodayLocalISO(){
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0,0);
-  return start.toISOString();
-}
-function startOfNDaysAgoLocalISO(daysAgo){
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0,0);
-  start.setDate(start.getDate() - daysAgo);
-  return start.toISOString();
-}
-
-async function loadUsageStats(force=false){
-  // keep it light: refresh max every 30s (or forced)
-  const nowMs = Date.now();
-  if(!force && (nowMs - lastUsageFetch) < 30000) return;
-  lastUsageFetch = nowMs;
-
-  try{
-    const sinceISO = startOfNDaysAgoLocalISO(13); // last 14 days incl today
-    const todayISO = startOfTodayLocalISO();
-
-    // Promo redemptions totals
-    const { count: totalPromoApproved, error: eTot } = await sb
-      .from("redemptions")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "approved");
-    if(eTot) throw eTot;
-
-    const { count: todayPromoApproved, error: eToday } = await sb
-      .from("redemptions")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "approved")
-      .gte("created_at", todayISO);
-    if(eToday) throw eToday;
-
-    // Rewards totals
-    const { count: totalRewardsApproved, error: eRTot } = await sb
-      .from("loyalty_reward_redemptions")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "approved");
-    if(eRTot) throw eRTot;
-
-    const { count: todayRewardsApproved, error: eRToday } = await sb
-      .from("loyalty_reward_redemptions")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "approved")
-      .gte("created_at", todayISO);
-    if(eRToday) throw eRToday;
-
-    // Series: promo approved last 14 days
-    const { data: promoRows, error: ePromo } = await sb
-      .from("redemptions")
-      .select("created_at")
-      .eq("status", "approved")
-      .gte("created_at", sinceISO)
-      .limit(5000);
-    if(ePromo) throw ePromo;
-
-    // Series: rewards approved last 14 days
-    const { data: rewardsRows, error: eRewards } = await sb
-      .from("loyalty_reward_redemptions")
-      .select("created_at")
-      .eq("status", "approved")
-      .gte("created_at", sinceISO)
-      .limit(5000);
-    if(eRewards) throw eRewards;
-
-    // Users series: profiles created last 14 days
-    const { data: userRows, error: eUsr } = await sb
-      .from("profiles")
-      .select("created_at")
-      .gte("created_at", sinceISO)
-      .limit(5000);
-    if(eUsr) throw eUsr;
-
-    // Users today
-    const { count: usersToday, error: eUsersToday } = await sb
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", todayISO);
-    if(eUsersToday) throw eUsersToday;
-
-    // Build day buckets
-    const labels = [];
-    const promoMap = {};
-    const rewardsMap = {};
-    const usersMap = {};
-
-    for(let i=13;i>=0;i--){
-      const d = new Date();
-      d.setHours(0,0,0,0);
-      d.setDate(d.getDate()-i);
-      const key = dateKeyLocal(d);
-      labels.push(key);
-      promoMap[key]=0;
-      rewardsMap[key]=0;
-      usersMap[key]=0;
-    }
-
-    (promoRows||[]).forEach(r=>{
-      const key = dateKeyLocal(new Date(r.created_at));
-      if(promoMap[key] !== undefined) promoMap[key]++;
-    });
-    (rewardsRows||[]).forEach(r=>{
-      const key = dateKeyLocal(new Date(r.created_at));
-      if(rewardsMap[key] !== undefined) rewardsMap[key]++;
-    });
-    (userRows||[]).forEach(r=>{
-      const key = dateKeyLocal(new Date(r.created_at));
-      if(usersMap[key] !== undefined) usersMap[key]++;
-    });
-
-    usageStats = {
-      ready:true,
-      updatedAt: new Date().toISOString(),
-      redeemsToday: todayPromoApproved || 0,
-      redeemsTotal: totalPromoApproved || 0,
-      rewardsToday: todayRewardsApproved || 0,
-      rewardsTotal: totalRewardsApproved || 0,
-      usersToday: usersToday || 0,
-      labels,
-      redeemsSeries: labels.map(k=>promoMap[k]||0),
-      rewardsSeries: labels.map(k=>rewardsMap[k]||0),
-      usersSeries: labels.map(k=>usersMap[k]||0)
-    };
-
-    // refresh UI bits + chart if visible
-    renderAll();
-  }catch(e){
-    console.error(e);
-    // don't break kiosk if stats fail
-  }
-}
-
-function ensureUsageCharts(){
-  if(!usageStats?.ready) return;
-
-  const canvasUsers = document.getElementById("usageChartUsers");
-  const canvasPR = document.getElementById("usageChartPromoRewards");
-
-  // If UI re-rendered, canvases may be new. Recreate charts accordingly.
-  if(usageChartUsers && canvasUsers && usageChartUsers.canvas !== canvasUsers){
-    try{ usageChartUsers.destroy(); }catch(e){}
-    usageChartUsers = null;
-  }
-  if(usageChartPromoRewards && canvasPR && usageChartPromoRewards.canvas !== canvasPR){
-    try{ usageChartPromoRewards.destroy(); }catch(e){}
-    usageChartPromoRewards = null;
-  }
-
-  // Shared options
-  const baseOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { labels: { color: "#e5e7eb", font: { weight: "700" } } },
-      tooltip: { enabled: true }
-    },
-    scales: {
-      x: { ticks: { color: "rgba(229,231,235,0.75)", maxRotation: 0, autoSkip: true }, grid: { color: "rgba(148,163,184,0.08)" } },
-      y: { ticks: { color: "rgba(229,231,235,0.75)" }, grid: { color: "rgba(148,163,184,0.08)" }, beginAtZero: true }
-    },
-    elements: { line: { tension: 0.35 } } // onda
-  };
-
-  // Chart 1: Users
-  if(canvasUsers){
-    const dataUsers = {
-      labels: usageStats.labels,
-      datasets: [
-        {
-          label: "Nuovi utenti",
-          data: usageStats.usersSeries,
-          fill: false
-        }
-      ]
-    };
-
-    if(usageChartUsers){
-      usageChartUsers.data = dataUsers;
-      usageChartUsers.options = baseOptions;
-      usageChartUsers.update();
-    }else{
-      const ctx = canvasUsers.getContext("2d");
-      usageChartUsers = new Chart(ctx, { type: "line", data: dataUsers, options: baseOptions });
-    }
-  }
-
-  // Chart 2: Promo + Rewards
-  if(canvasPR){
-    const dataPR = {
-      labels: usageStats.labels,
-      datasets: [
-        {
-          label: "Riscatti promo (approvati)",
-          data: usageStats.redeemsSeries,
-          fill: false
-        },
-        {
-          label: "Riscatti premi (approvati)",
-          data: usageStats.rewardsSeries,
-          fill: false
-        }
-      ]
-    };
-
-    if(usageChartPromoRewards){
-      usageChartPromoRewards.data = dataPR;
-      usageChartPromoRewards.options = baseOptions;
-      usageChartPromoRewards.update();
-    }else{
-      const ctx = canvasPR.getContext("2d");
-      usageChartPromoRewards = new Chart(ctx, { type: "line", data: dataPR, options: baseOptions });
-    }
-  }
-}
-
 
 
 function renderLogin(){
@@ -636,10 +356,8 @@ async function startDashboard(){
   document.body.classList.toggle("focus", focusMode);
   try{ await loadPromotions(); }catch(e){ console.error(e); alert(String(e.message||e)); return; }
   setInterval(()=>{ loadRedemptions(); loadRewards(); },2000);
-  setInterval(()=>{ loadUsageStats(false); },30000);
   renderAll();
   loadRewards();
-  loadUsageStats(true);
 }
 
 async function loadRedemptions(){
@@ -665,7 +383,7 @@ async function loadRedemptions(){
       const expireIds = toExpire.filter(id => !pendingPromoIds.has(id));
       if(expireIds.length){
         expireIds.forEach(id => pendingPromoIds.add(id));
-        const { error: expErr } = await sb.from("redemptions").update({status:"expired"}).in("id", expireIds);
+        const { error: expErr } = await sb.from("redemptions").update({status:"expired"}).in("id", expireIds).eq("status","waiting");
         expireIds.forEach(id => pendingPromoIds.delete(id));
         if(expErr){
           console.error(expErr);
@@ -847,45 +565,6 @@ function renderDashboard(data){
 
   const main = (activeTab === "rewards") ? rewardsList : promoList;
 
-  const updatedLabel = (usageStats?.ready && usageStats.updatedAt)
-    ? new Date(usageStats.updatedAt).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit",second:"2-digit"})
-    : "—";
-
-  const usageCard = `
-    <div class="container">
-      <div class="card">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <div class="promo">Utilizzo App</div>
-          <div class="updatePill">Aggiornato: <b>${updatedLabel}</b></div>
-        </div>
-
-        <div class="small">
-          Ultimi 14 giorni • Promo approvate: <b>${usageStats?.ready ? usageStats.redeemsTotal : "—"}</b> •
-          Premi approvati: <b>${usageStats?.ready ? usageStats.rewardsTotal : "—"}</b>
-        </div>
-
-        <div class="chartMeta">
-          <div class="badge">Riscatti promo: <b>${usageStats?.ready ? usageStats.redeemsToday : "—"}</b></div>
-          <div class="badge">Riscatti premi: <b>${usageStats?.ready ? usageStats.rewardsToday : "—"}</b></div>
-          <div class="badge">Nuovi utenti: <b>${usageStats?.ready ? usageStats.usersToday : "—"}</b></div>
-        </div>
-
-        <div class="chartGrid">
-          <div class="chartWrap" style="height:240px;">
-            <div class="small" style="margin:0 0 8px 2px; opacity:0.85;"><b>Nuovi utenti</b> (per giorno)</div>
-            <canvas id="usageChartUsers"></canvas>
-          </div>
-
-          <div class="chartWrap" style="height:240px;">
-            <div class="small" style="margin:0 0 8px 2px; opacity:0.85;"><b>Promo & Premi</b> (approvati per giorno)</div>
-            <canvas id="usageChartPromoRewards"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
-
   document.getElementById("app").innerHTML=`
   <div class="header">
     <div class="title" style="text-align:center;">Kiosk</div>
@@ -908,11 +587,7 @@ function renderDashboard(data){
     ${errText}
   </div>
 
-  ${main}
-  ${usageCard}`;
-
-  // chart init/update after DOM is in place
-  requestAnimationFrame(()=>ensureUsageCharts());
+  ${main}`;
 }
 
 function toggleFocus(){
