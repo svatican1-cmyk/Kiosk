@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>Reimposta Password - Gelato Club</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      background:#0f172a;
+      color:white;
+      font-family: system-ui;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+      margin:0;
+    }
+    .box {
+      background:#1e293b;
+      padding:30px;
+      border-radius:16px;
+      width:100%;
+      max-width:400px;
+      box-shadow:0 0 40px rgba(0,0,0,.4);
+    }
+    h2 { margin-top:0 }
+    input {
+      width:100%;
+      padding:12px;
+      margin-top:10px;
+      border-radius:8px;
+      border:none;
+      font-size:16px;
+    }
+    button {
+      width:100%;
+      margin-top:15px;
+      padding:12px;
+      background:#3b82f6;
+      border:none;
+      color:white;
+      font-size:16px;
+      border-radius:8px;
+      cursor:pointer;
+    }
+    .success { color:#22c55e; margin-top:10px }
+    .error { color:#ef4444; margin-top:10px }
+  </style>
+</head>
+<body>
+
+<div class="box">
+  <h2>Reimposta Password</h2>
+  <p>Inserisci la nuova password</p>
+  <input type="password" id="password" placeholder="Nuova password" />
+  <button onclick="updatePassword()">Salva nuova password</button>
+  <div id="message"></div>
+</div>
+
+<script>
+const supabase = window.supabase.createClient(
+  "https://cbgwfngseoppybsbbwwo.supabase.co",
+  "TUO_ANON_PUBLIC_KEY"
+);
+
+// Legge token dalla URL
+const hash = window.location.hash.substring(1);
+const params = new URLSearchParams(hash);
+const access_token = params.get("access_token");
+const refresh_token = params.get("refresh_token");
+
+if (access_token && refresh_token) {
+  supabase.auth.setSession({
+    access_token,
+    refresh_token
+  });
+}
+
+async function updatePassword() {
+  const password = document.getElementById("password").value;
+  const message = document.getElementById("message");
+
+  if (!password || password.length < 6) {
+    message.innerHTML = "<div class='error'>Password troppo corta</div>";
+    return;
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    message.innerHTML = "<div class='error'>Errore: " + error.message + "</div>";
+  } else {
+    message.innerHTML = "<div class='success'>Password aggiornata con successo! Ora puoi chiudere la pagina.</div>";
+  }
+}
+</script>
+
+</body>
+</html>
