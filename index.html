@@ -630,12 +630,31 @@ async function loadUsageStats(force=false){
       .limit(5000);
     if(eR7) throw eR7;
 
-    const { data: userRows7, error: eU7 } = await sb
-      .from("clients")
+    // Utenti registrati ultimi 7 giorni:
+// la tabella clients NON ha created_at nel tuo schema, quindi provo prima clients.created_at
+// (se un giorno lo aggiungi), altrimenti fallback su profiles.created_at.
+let userRows7 = [];
+{
+  const { data, error } = await sb
+    .from("clients")
+    .select("created_at")
+    .gte("created_at", sinceISO)
+    .limit(5000);
+
+  if (!error) {
+    userRows7 = data || [];
+  } else if (error.code === "42703" || (error.message || "").includes("created_at")) {
+    const { data: pData, error: pErr } = await sb
+      .from("profiles")
       .select("created_at")
       .gte("created_at", sinceISO)
       .limit(5000);
-    if(eU7) throw eU7;
+    if (pErr) throw pErr;
+    userRows7 = pData || [];
+  } else {
+    throw error;
+  }
+}
 
     // Buckets giorni (oggi e 6 giorni indietro)
     const labels = [];
