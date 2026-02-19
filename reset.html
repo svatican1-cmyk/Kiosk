@@ -13,15 +13,18 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      height:100vh;
+      min-height:100vh;
       margin:0;
+      padding:16px;
+      box-sizing:border-box;
     }
     .box {
       background:#1e293b;
-      padding:30px;
+      padding:28px;
       border-radius:16px;
       width:100%;
-      max-width:400px;
+      max-width:420px;
+      margin:0 auto;
       box-shadow:0 0 40px rgba(0,0,0,.4);
     }
     h2 { margin-top:0 }
@@ -59,7 +62,7 @@
 </div>
 
 <script>
-const supabase = window.supabase.createClient(
+const sb = window.supabase.createClient(
   "https://cbgwfngseoppybsbbwwo.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNiZ3dmbmdzZW9wcHlic2Jid3dvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4NTk4NDYsImV4cCI6MjA3NTQzNTg0Nn0.5U_4SNDZ18YA7PHY7dH3vZItGp-_XzeQxS1IMAuBQEs"
 );
@@ -70,13 +73,14 @@ const params = new URLSearchParams(hash);
 const access_token = params.get("access_token");
 const refresh_token = params.get("refresh_token");
 
-if (access_token && refresh_token) {
-  supabase.auth.setSession({
-    access_token,
-    refresh_token
-  });
-}
 
+const messageEl = document.getElementById("message");
+
+if (!(access_token && refresh_token)) {
+  messageEl.innerHTML = "<div class='error'>Link non valido o scaduto. Richiedi di nuovo il reset password.</div>";
+} else {
+  sb.auth.setSession({ access_token, refresh_token });
+}
 async function updatePassword() {
   const password = document.getElementById("password").value;
   const message = document.getElementById("message");
@@ -86,7 +90,7 @@ async function updatePassword() {
     return;
   }
 
-  const { error } = await supabase.auth.updateUser({ password });
+  const { error } = await sb.auth.updateUser({ password });
 
   if (error) {
     message.innerHTML = "<div class='error'>Errore: " + error.message + "</div>";
