@@ -42,6 +42,23 @@ body{
   border:2px solid transparent;
   transition:0.3s;
 }
+
+.card.selected{
+  border-color:#38bdf8 !important;
+  box-shadow:0 0 0 3px rgba(56,189,248,0.25), 0 10px 25px rgba(0,0,0,0.4);
+}
+.selBadge{
+  display:inline-block;
+  margin-top:10px;
+  padding:6px 10px;
+  border-radius:999px;
+  background:rgba(56,189,248,0.15);
+  border:1px solid rgba(56,189,248,0.35);
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:0.3px;
+}
+
 .waiting{
   animation:blink 1.2s infinite;
 }
@@ -145,7 +162,7 @@ input{
 }
 .dot{ width:10px; height:10px; border-radius:999px; background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,0.15); }
 .dot.off{ background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,0.15); }
-.dot.pulse{ animation:pulseSlow 1.8s ease-in-out infinite; }
+.dot.pulse{ animation:pulseSlow 2.2s ease-in-out infinite; }
 @keyframes pulseSlow{
   0%{ transform:scale(1); opacity:0.9; box-shadow:0 0 0 3px rgba(34,197,94,0.12); }
   50%{ transform:scale(1.12); opacity:1; box-shadow:0 0 0 6px rgba(34,197,94,0.18); }
@@ -326,6 +343,158 @@ let lastError = "";
 let promoRows = [];
 let rewardRows = [];
 
+// Keypad navigation / auto-selection
+let navMode = false; // false = auto-select mode (Enter approves immediately)
+let selectedItem = { type: null, id: null, index: -1 }; // type: 'promo' | 'rewards'
+let prevPromoIds = new Set();
+let prevRewardIds = new Set();
+
+function listHasSelected(){
+  if(!selectedItem.id || !selectedItem.type) return false;
+  const list = selectedItem.type === "rewards" ? (rewardRows||[]) : (promoRows||[]);
+  return list.some(r => r.id === selectedItem.id);
+}
+
+function setSelected(type, index, reason=""){
+  const list = type === "rewards" ? (rewardRows||[]) : (promoRows||[]);
+  if(!list.length){
+    selectedItem = {type:null,id:null,index:-1};
+    return;
+  }
+  const i = Math.max(0, Math.min(index, list.length-1));
+  selectedItem = { type, id: list[i].id, index: i };
+  // keep tab aligned
+  if(activeTab !== type){
+    activeTab = type;
+    localStorage.setItem("kiosk_tab", type);
+  }
+}
+
+function selectFirstInTab(type){
+  const list = type === "rewards" ? (rewardRows||[]) : (promoRows||[]);
+  if(list.length) setSelected(type, 0, "first");
+}
+
+function selectNewestAcrossNewItems(newPromoIds, newRewardIds){
+  let best = null; // {type, index, ts}
+  if(newPromoIds.size){
+    const list = promoRows||[];
+    list.forEach((r, idx)=>{
+      if(newPromoIds.has(r.id)){
+        const ts = new Date(r.created_at).getTime();
+        if(!best || ts > best.ts) best = {type:"promo", index:idx, ts};
+      }
+    });
+  }
+  if(newRewardIds.size){
+    const list = rewardRows||[];
+    list.forEach((r, idx)=>{
+      if(newRewardIds.has(r.id)){
+        const ts = new Date(r.created_at).getTime();
+        if(!best || ts > best.ts) best = {type:"rewards", index:idx, ts};
+      }
+    });
+  }
+  if(best){
+    setSelected(best.type, best.index, "new");
+  }
+}
+
+function onListsUpdated(){
+  const promoIdsNow = new Set((promoRows||[]).map(r=>r.id));
+  const rewardIdsNow = new Set((rewardRows||[]).map(r=>r.id));
+
+  const newPromo = new Set([...promoIdsNow].filter(id => !prevPromoIds.has(id)));
+  const newReward = new Set([...rewardIdsNow].filter(id => !prevRewardIds.has(id)));
+
+  // if anything new arrives -> exit navigation and auto-select newest new
+  if(newPromo.size || newReward.size){
+    navMode = false;
+    selectNewestAcrossNewItems(newPromo, newReward);
+  }
+
+  // if no selected (or selected disappeared) -> select first in current tab (FIFO)
+  if(!listHasSelected()){
+    if(activeTab === "rewards" && (rewardRows||[]).length) selectFirstInTab("rewards");
+    else if((promoRows||[]).length) selectFirstInTab("promo");
+    else if((rewardRows||[]).length) selectFirstInTab("rewards");
+  }else{
+    // keep index in sync
+    const list = selectedItem.type === "rewards" ? (rewardRows||[]) : (promoRows||[]);
+    const idx = list.findIndex(r=>r.id===selectedItem.id);
+    if(idx >= 0) selectedItem.index = idx;
+  }
+
+  prevPromoIds = promoIdsNow;
+  prevRewardIds = rewardIdsNow;
+}
+
+function isEditableTarget(el){
+  if(!el) return false;
+  const tag = (el.tagName||"").toLowerCase();
+  return tag === "input" || tag === "textarea" || el.isContentEditable;
+}
+
+function handleKeydown(e){
+  if(isEditableTarget(document.activeElement)) return;
+  const key = e.key;
+  const code = e.code;
+
+  const isUp = (key === "8" || code === "Numpad8");
+  const isDown = (key === "2" || code === "Numpad2");
+  const isLeft = (key === "4" || code === "Numpad4");
+  const isRight = (key === "6" || code === "Numpad6");
+  const isEnter = (key === "Enter" || code === "NumpadEnter");
+
+  if(!(isUp||isDown||isLeft||isRight||isEnter)) return;
+
+  e.preventDefault();
+
+  // any arrow => navigation mode
+  if(isUp || isDown || isLeft || isRight){
+    navMode = true;
+  }
+
+  if(isLeft){
+    setTab("promo");
+    if(!listHasSelected() || selectedItem.type !== "promo") selectFirstInTab("promo");
+    renderAll();
+    return;
+  }
+  if(isRight){
+    setTab("rewards");
+    if(!listHasSelected() || selectedItem.type !== "rewards") selectFirstInTab("rewards");
+    renderAll();
+    return;
+  }
+  if(isUp || isDown){
+    const type = activeTab;
+    const list = type === "rewards" ? (rewardRows||[]) : (promoRows||[]);
+    if(!list.length){ renderAll(); return; }
+    const cur = (selectedItem.type === type && selectedItem.index >= 0) ? selectedItem.index : 0;
+    const next = isUp ? (cur - 1) : (cur + 1);
+    setSelected(type, next, "move");
+    renderAll();
+    return;
+  }
+  if(isEnter){
+    // Enter approves selected
+    if(!selectedItem.type || !selectedItem.id){ return; }
+    if(selectedItem.type === "rewards"){
+      const row = (rewardRows||[]).find(r=>r.id===selectedItem.id);
+      const title = row ? (row.reward_title || row.reward_id || "") : "";
+      approveReward(selectedItem.id, title);
+    }else{
+      const row = (promoRows||[]).find(r=>r.id===selectedItem.id);
+      const title = row ? (getPromoTitle(row.promo_id) || row.promo_id || "") : "";
+      approve(selectedItem.id, title);
+    }
+    return;
+  }
+}
+
+window.addEventListener("keydown", handleKeydown, {passive:false});
+
 
 // Usage (KPI dal DB - ultimi 7 giorni + totali mese)
 let usage = {
@@ -461,28 +630,12 @@ async function loadUsageStats(force=false){
       .limit(5000);
     if(eR7) throw eR7;
 
-    // Utenti registrati: preferiamo clients.created_at (se esiste). Se non esiste, fallback su profiles.created_at.
-    let userRows7 = [];
-    {
-      const { data, error } = await sb
-        .from("clients")
-        .select("created_at")
-        .gte("created_at", sinceISO)
-        .limit(5000);
-      if(!error){
-        userRows7 = data || [];
-      }else if(error.code === "42703"){ // column does not exist
-        const { data: pData, error: pErr } = await sb
-          .from("profiles")
-          .select("created_at")
-          .gte("created_at", sinceISO)
-          .limit(5000);
-        if(pErr) throw pErr;
-        userRows7 = pData || [];
-      }else{
-        throw error;
-      }
-    }
+    const { data: userRows7, error: eU7 } = await sb
+      .from("clients")
+      .select("created_at")
+      .gte("created_at", sinceISO)
+      .limit(5000);
+    if(eU7) throw eU7;
 
     // Buckets giorni (oggi e 6 giorni indietro)
     const labels = [];
@@ -526,39 +679,12 @@ async function loadUsageStats(force=false){
       usersTotal: usersTotal || 0
     };
 
-    // aggiorna UI senza re-render totale (evita flicker grafici)
-    updateUsageSection();
+    // aggiorna UI
+    renderAll();
   }catch(e){
     console.error(e);
     // non bloccare il kiosk se stats falliscono
   }
-}
-
-
-function updateUsageSection(){
-  // aggiorna solo la sezione "Utilizzo App" senza rifare tutta la pagina
-  if(!usage?.ready){ return; }
-  const elUpdated = document.getElementById("usageUpdatedAt");
-  const elPM = document.getElementById("usagePromoMonth");
-  const elRM = document.getElementById("usageRewardMonth");
-  const elUT = document.getElementById("usageUsersTotal");
-  const elPW = document.getElementById("usagePromoWeek");
-  const elRW = document.getElementById("usageRewardWeek");
-  const elUW = document.getElementById("usageUsersWeek");
-
-  const promoWeek = usage.promoSeries.reduce((a,b)=>a+b,0);
-  const rewardWeek = usage.rewardSeries.reduce((a,b)=>a+b,0);
-  const usersWeek = usage.usersSeries.reduce((a,b)=>a+b,0);
-
-  if(elUpdated) elUpdated.textContent = new Date(usage.updatedAt).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
-  if(elPM) elPM.textContent = String(usage.promoMonth ?? 0);
-  if(elRM) elRM.textContent = String(usage.rewardMonth ?? 0);
-  if(elUT) elUT.textContent = String(usage.usersTotal ?? 0);
-  if(elPW) elPW.textContent = String(promoWeek);
-  if(elRW) elRW.textContent = String(rewardWeek);
-  if(elUW) elUW.textContent = String(usersWeek);
-
-  ensureUsageCharts();
 }
 
 function ensureUsageCharts(){
@@ -594,7 +720,7 @@ function ensureUsageCharts(){
   }else{
     usageChartUsers.data.labels = labelsShort;
     usageChartUsers.data.datasets[0].data = usage.usersSeries;
-    usageChartUsers.update('none');
+    usageChartUsers.update();
   }
 
   // Promo & rewards chart
@@ -621,7 +747,7 @@ function ensureUsageCharts(){
     usageChartPromoRewards.data.labels = labelsShort;
     usageChartPromoRewards.data.datasets[0].data = usage.promoSeries;
     usageChartPromoRewards.data.datasets[1].data = usage.rewardSeries;
-    usageChartPromoRewards.update('none');
+    usageChartPromoRewards.update();
   }
 }
 
@@ -708,6 +834,7 @@ async function loadRedemptions(){
     // filter out those we just expired (they'll disappear next poll anyway)
     const visible = rows.filter(r => !toExpire.includes(r.id));
     promoRows = visible;
+    onListsUpdated();
     renderAll();
   }catch(e){
     online = false;
@@ -752,6 +879,7 @@ async function loadRewards(){
     }
 
     rewardRows = rows.filter(r => !expired.includes(r.id));
+    onListsUpdated();
     renderAll();
   }catch(e){
     online = false;
@@ -833,16 +961,18 @@ function renderDashboard(data){
 
   const promoList = `
     <div class="container">
-      ${(promoRows || []).map(r=>{
+      ${(promoRows || []).map((r,idx)=>{
         const mins = minutesAgo(r.created_at);
         const age = mins===0 ? "adesso" : (mins===1 ? "1 min" : (mins + " min"));
         const disabled = pendingPromoIds.has(r.id) ? "disabled" : "";
         const title = (getPromoTitle(r.promo_id) || r.promo_id || "").replace(/'/g,"\'");
+        const sel = (selectedItem.type !== "rewards" && selectedItem.id === r.id) ? " selected" : "";
         return `
-        <div class="card waiting">
+        <div class="card waiting${sel}" onclick="navMode=true; setSelected('promo', ${idx}); renderAll();">
           <div class="promo">${getPromoTitle(r.promo_id)}</div>
           <div class="user">${r.user_email||"OSPITE"}</div>
           <div class="time">${formatTime(r.created_at)} • in attesa da ${age}</div>
+          ${sel ? `<div class="selBadge">INVIO = CONVALIDA</div>` : ``}
           <div class="buttons">
             <button class="approve" ${disabled} onclick="approve('${r.id}','${title}')">CONVALIDA</button>
             <button class="cancel" ${disabled} onclick="cancel('${r.id}','${title}')">ANNULLA</button>
@@ -854,18 +984,20 @@ function renderDashboard(data){
 
   const rewardsList = `
     <div class="container">
-      ${(rewardRows || []).map(r=>{
+      ${(rewardRows || []).map((r,idx)=>{
         const mins = minutesAgo(r.created_at);
         const age = mins===0 ? "adesso" : (mins===1 ? "1 min" : (mins + " min"));
         const disabled = pendingRewardIds.has(r.id) ? "disabled" : "";
         const title = (r.reward_title || r.reward_id || "").replace(/'/g,"\'");
+        const sel = (selectedItem.type === "rewards" && selectedItem.id === r.id) ? " selected" : "";
         const exp = r.expire_at ? ` • scade: ${formatTime(r.expire_at)}` : "";
         const who = r.user_email || r.client_ref || "OSPITE";
         return `
-        <div class="card waiting">
+        <div class="card waiting${sel}" onclick="navMode=true; setSelected('rewards', ${idx}); renderAll();">
           <div class="promo">${r.reward_title || "Premio"}</div>
           <div class="user">${who}</div>
           <div class="time">${formatTime(r.created_at)} • in attesa da ${age}${exp}</div>
+          ${sel ? `<div class="selBadge">INVIO = CONVALIDA</div>` : ``}
           <div class="small">Costo: <b>${r.cost_points}</b> punti • Codice: <b>${r.code || "-"}</b></div>
           <div class="buttons">
             <button class="approve" ${disabled} onclick="approveReward('${r.id}','${title}')">CONVALIDA PREMIO</button>
@@ -893,12 +1025,12 @@ function renderDashboard(data){
         </div>
 
         <div class="usageMeta">
-          <div class="badge">Promo (mese): <b id="usagePromoMonth">${usage?.ready ? usage.promoMonth : "—"}</b></div>
-          <div class="badge">Premi (mese): <b id="usageRewardMonth">${usage?.ready ? usage.rewardMonth : "—"}</b></div>
-          <div class="badge">Utenti totali: <b id="usageUsersTotal">${usage?.ready ? usage.usersTotal : "—"}</b></div>
-          <div class="badge">Promo 7g: <b id="usagePromoWeek">${usage?.ready ? promoWeek : "—"}</b></div>
-          <div class="badge">Premi 7g: <b id="usageRewardWeek">${usage?.ready ? rewardWeek : "—"}</b></div>
-          <div class="badge">Utenti 7g: <b id="usageUsersWeek">${usage?.ready ? usersWeek : "—"}</b></div>
+          <div class="badge">Promo (mese): <b>${usage?.ready ? usage.promoMonth : "—"}</b></div>
+          <div class="badge">Premi (mese): <b>${usage?.ready ? usage.rewardMonth : "—"}</b></div>
+          <div class="badge">Utenti totali: <b>${usage?.ready ? usage.usersTotal : "—"}</b></div>
+          <div class="badge">Promo 7g: <b>${usage?.ready ? promoWeek : "—"}</b></div>
+          <div class="badge">Premi 7g: <b>${usage?.ready ? rewardWeek : "—"}</b></div>
+          <div class="badge">Utenti 7g: <b>${usage?.ready ? usersWeek : "—"}</b></div>
         </div>
 
         <div class="chartGrid">
