@@ -218,6 +218,15 @@ button:disabled{
   margin-top:6px;
 }
 
+.focus .header{ padding:24px; }
+.focus .title{ font-size:34px; }
+.focus .stats{ font-size:18px; }
+.focus .card{ padding:24px; border-radius:18px; }
+.focus .promo{ font-size:26px; }
+.focus .user{ font-size:18px; }
+.focus .buttons button{ padding:18px; font-size:18px; border-radius:12px; }
+
+
 .tabs{
   display:flex;
   gap:10px;
@@ -311,6 +320,7 @@ const sb = window.supabase.createClient(
 
 let promotions = [];
 let totalCount = parseInt(localStorage.getItem("kiosk_total")) || 0;
+let focusMode = (localStorage.getItem("kiosk_focus") === "1");
 let activeTab = (localStorage.getItem("kiosk_tab") || "promo");
 let pendingPromoIds = new Set();
 let pendingRewardIds = new Set();
@@ -718,6 +728,7 @@ async function checkStaff(){
 
 async function startDashboard(){
   initKeyboardOnce();
+  document.body.classList.toggle("focus", focusMode);
   try{ await loadPromotions(); }catch(e){ console.error(e); alert(String(e.message||e)); return; }
   setInterval(()=>{ loadRedemptions(); loadRewards(); },2000);
   setInterval(()=>{ loadUsageStats(false); },30000);
@@ -988,6 +999,16 @@ document.getElementById("app").innerHTML=`
       ${usageBadges}
       <div class="badge">Totale: ${totalCount}</div>
 
+      <div class="toggle ${focusMode ? "on":""}" onclick="toggleFocus()">
+        Focus
+        <span class="switch"></span>
+      </div>
+    </div>
+    ${tabs}
+    ${kbdHint}
+    ${errText}
+  </div>
+
   ${main}
   <div id="usageMount"></div>`;
 
@@ -1004,6 +1025,13 @@ document.getElementById("app").innerHTML=`
   requestAnimationFrame(()=>ensureUsageChart());
 }
 
+function toggleFocus(){
+  focusMode = !focusMode;
+  localStorage.setItem("kiosk_focus", focusMode ? "1":"0");
+  document.body.classList.toggle("focus", focusMode);
+  // re-render keeps current data view on next poll; immediate refresh:
+  renderAll();
+}
 
 async function approve(id, promoTitle=""){
   if(pendingPromoIds.has(id)) return;
