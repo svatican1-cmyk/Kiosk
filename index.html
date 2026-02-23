@@ -169,6 +169,8 @@ input{
 }
 .dot{ width:10px; height:10px; border-radius:999px; background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,0.15); }
 .dot.off{ background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,0.15); }
+.badge.onlinePulse{ animation:onlinePulse 2.6s ease-in-out infinite; }
+@keyframes onlinePulse{ 0%,100%{opacity:1;} 50%{opacity:0.55;} }
 
 .toprow{
   margin-top:10px;
@@ -177,36 +179,6 @@ input{
   flex-wrap:wrap;
   align-items:center;
 }
-.toggle{
-  margin-left:auto;
-  display:inline-flex;
-  align-items:center;
-  gap:10px;
-  padding:8px 10px;
-  border-radius:12px;
-  border:1px solid rgba(148,163,184,0.25);
-  background:rgba(15,23,42,0.55);
-  cursor:pointer;
-  user-select:none;
-  font-weight:700;
-}
-.switch{
-  width:44px; height:24px;
-  border-radius:999px;
-  background:rgba(148,163,184,0.25);
-  position:relative;
-}
-.switch::after{
-  content:"";
-  position:absolute; top:3px; left:3px;
-  width:18px; height:18px;
-  border-radius:999px;
-  background:#e5e7eb;
-  transition:transform 160ms ease;
-}
-.toggle.on .switch{ background:rgba(59,130,246,0.55); }
-.toggle.on .switch::after{ transform:translateX(20px); }
-
 button:disabled{
   opacity:0.55;
   cursor:not-allowed;
@@ -217,14 +189,6 @@ button:disabled{
   opacity:0.7;
   margin-top:6px;
 }
-
-.focus .header{ padding:24px; }
-.focus .title{ font-size:34px; }
-.focus .stats{ font-size:18px; }
-.focus .card{ padding:24px; border-radius:18px; }
-.focus .promo{ font-size:26px; }
-.focus .user{ font-size:18px; }
-.focus .buttons button{ padding:18px; font-size:18px; border-radius:12px; }
 
 
 .tabs{
@@ -318,9 +282,31 @@ const sb = window.supabase.createClient(
   }
 );
 
+let syncChannel = null;
+function getSyncChannel(){
+  try{
+    if(syncChannel) return syncChannel;
+    syncChannel = sb.channel("gelato-sync");
+    syncChannel.subscribe();
+    return syncChannel;
+  }catch(e){
+    console.warn("sync channel init error", e);
+    return null;
+  }
+}
+async function sendRedemptionUpdate(id, status){
+  const ch = getSyncChannel();
+  if(!ch) return;
+  try{
+    await ch.send({ type:"broadcast", event:"redemption:update", payload:{ id, status } });
+  }catch(e){
+    console.warn("broadcast redemption:update failed", e);
+  }
+}
+
 let promotions = [];
 let totalCount = parseInt(localStorage.getItem("kiosk_total")) || 0;
-let focusMode = (localStorage.getItem("kiosk_focus") === "1");
+let focusMode = false;
 let activeTab = (localStorage.getItem("kiosk_tab") || "promo");
 let pendingPromoIds = new Set();
 let pendingRewardIds = new Set();
@@ -728,7 +714,6 @@ async function checkStaff(){
 
 async function startDashboard(){
   initKeyboardOnce();
-  document.body.classList.toggle("focus", focusMode);
   try{ await loadPromotions(); }catch(e){ console.error(e); alert(String(e.message||e)); return; }
   setInterval(()=>{ loadRedemptions(); loadRewards(); },2000);
   setInterval(()=>{ loadUsageStats(false); },30000);
@@ -765,6 +750,9 @@ async function loadRedemptions(){
         if(expErr){
           console.error(expErr);
           lastError = expErr.message || String(expErr);
+        }else{
+          // notify clients so they can close pending UI
+          for(const rid of expireIds){ await sendRedemptionUpdate(rid, "expired"); }
         }
       }
     }
@@ -817,6 +805,9 @@ async function loadRewards(){
         if(expErr){
           console.error(expErr);
           lastError = expErr.message || String(expErr);
+        }else{
+          // notify clients so they can close pending UI
+          for(const rid of expireIds){ await sendRedemptionUpdate(rid, "expired"); }
         }
       }
     }
@@ -899,6 +890,7 @@ function renderDashboard(data){
 
   const statusLabel = online ? "Online" : "Offline";
   const dotClass = online ? "dot" : "dot off";
+  const statusBadgeClass = online ? "badge onlinePulse" : "badge";
   const errText = (!online && lastError) ? `<div class="small">Errore: ${String(lastError).slice(0,120)}</div>` : "";
 
   const tabs = `
@@ -959,13 +951,6 @@ function renderDashboard(data){
 
   const main = (activeTab === "rewards") ? rewardsList : promoList;
 
-  const usageBadges = usageStats?.ready ? `
-    <div class="badge">Oggi riscatti: <b>${usageStats.redeemsToday}</b></div>
-    <div class="badge">Oggi utenti: <b>${usageStats.usersToday}</b></div>
-  ` : `
-    <div class="badge">Oggi riscatti: <b>—</b></div>
-    <div class="badge">Oggi utenti: <b>—</b></div>
-  `;
 
   const usageCard = `
     <div class="container" id="usageCard">
@@ -975,6 +960,7 @@ function renderDashboard(data){
         <div class="chartMeta">
           <div class="badge">Riscatti oggi: <b>${usageStats?.ready ? usageStats.redeemsToday : "—"}</b></div>
           <div class="badge">Nuovi utenti oggi: <b>${usageStats?.ready ? usageStats.usersToday : "—"}</b></div>
+          <div class="badge">Totale: <b>${totalCount}</b></div>
         </div>
         <div class="chartWrap" style="height:260px;">
           <canvas id="usageChart"></canvas>
@@ -993,16 +979,7 @@ document.getElementById("app").innerHTML=`
 
     <div class="title">${activeTab==="rewards" ? "Premi in attesa" : "Convalide in attesa"}</div>
     <div class="toprow">
-      <div class="badge"><span class="${dotClass}"></span>${statusLabel}</div>
-      <div class="badge">Promo: ${waitingCount}</div>
-      <div class="badge">Premi: ${rewardWaiting}</div>
-      ${usageBadges}
-      <div class="badge">Totale: ${totalCount}</div>
-
-      <div class="toggle ${focusMode ? "on":""}" onclick="toggleFocus()">
-        Focus
-        <span class="switch"></span>
-      </div>
+      <div class="${statusBadgeClass}"><span class="${dotClass}"></span>${statusLabel}</div>
     </div>
     ${tabs}
     ${kbdHint}
@@ -1025,14 +1002,6 @@ document.getElementById("app").innerHTML=`
   requestAnimationFrame(()=>ensureUsageChart());
 }
 
-function toggleFocus(){
-  focusMode = !focusMode;
-  localStorage.setItem("kiosk_focus", focusMode ? "1":"0");
-  document.body.classList.toggle("focus", focusMode);
-  // re-render keeps current data view on next poll; immediate refresh:
-  renderAll();
-}
-
 async function approve(id, promoTitle=""){
   if(pendingPromoIds.has(id)) return;
   pendingPromoIds.add(id);
@@ -1046,6 +1015,7 @@ async function approve(id, promoTitle=""){
 
     totalCount++;
     localStorage.setItem("kiosk_total",totalCount);
+    await sendRedemptionUpdate(id, "approved");
     showToast("✅ Convalidata: " + (promoTitle || id), "ok");
   }catch(e){
     console.error(e);
@@ -1067,6 +1037,7 @@ async function cancel(id, promoTitle=""){
 
     if(error) throw error;
 
+    await sendRedemptionUpdate(id, "canceled");
     showToast("❌ Annullata: " + (promoTitle || id), "bad");
   }catch(e){
     console.error(e);
