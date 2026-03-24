@@ -3,11 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" type="image/png" href="icon/icon.png">
-<link rel="apple-touch-icon" href="icon/icon.png">
-<link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0f172a">
-<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
 <title>Gelato Club Kiosk</title>
@@ -259,7 +255,150 @@ button:disabled{
 }
 
 
-.chartWrap h3{ margin:0 0 8px 0; font-size:16px; }
+.chartWrap h3{ margin:0 0 8px 0; font-size:16px; }.chartMetaProfessional{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+}
+.statBadge{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:14px 16px;
+  border-radius:14px;
+  background:linear-gradient(180deg, rgba(30,41,59,0.88), rgba(15,23,42,0.9));
+  border:1px solid rgba(96,165,250,0.18);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.statBadge span{
+  font-size:13px;
+  color:rgba(226,232,240,0.78);
+  font-weight:700;
+}
+.statBadge b{
+  font-size:22px;
+  color:#fff;
+}
+@media (max-width: 900px){
+  .chartMetaProfessional{ grid-template-columns:1fr; }
+  .statBadge b{ font-size:20px; }
+}
+
+
+:root{
+  --bg:#081227;
+  --bg-2:#0d1a33;
+  --panel:#16233f;
+  --panel-2:#1b2a49;
+  --line:rgba(148,163,184,0.16);
+  --line-strong:rgba(96,165,250,0.24);
+  --text-soft:rgba(226,232,240,0.78);
+  --accent:#60a5fa;
+}
+body{
+  background:
+    radial-gradient(1200px 420px at 50% -10%, rgba(59,130,246,0.18), transparent 60%),
+    linear-gradient(180deg, #081227 0%, #0a1530 100%);
+  min-height:100vh;
+}
+.header{
+  background:linear-gradient(180deg, rgba(6,14,30,0.92), rgba(9,19,41,0.88));
+  backdrop-filter: blur(10px);
+}
+.titleBlock{
+  text-align:center;
+  margin-bottom:14px;
+}
+.brandTitle{
+  font-size:40px;
+  line-height:1;
+  font-weight:800;
+  letter-spacing:-0.03em;
+}
+.brandSub{
+  margin-top:6px;
+  color:var(--text-soft);
+  font-size:15px;
+  font-weight:600;
+}
+.sectionTitle{
+  font-size:22px;
+  font-weight:800;
+  letter-spacing:-0.02em;
+}
+.card{
+  background:linear-gradient(180deg, rgba(24,37,64,0.96), rgba(16,28,52,0.97));
+  border:1px solid var(--line);
+  box-shadow:0 18px 42px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.tabs{gap:12px;}
+.tab{
+  background:rgba(11,22,43,0.68);
+  border-color:rgba(148,163,184,0.18);
+}
+.tab.active{
+  background:linear-gradient(180deg, rgba(59,130,246,0.85), rgba(37,99,235,0.78));
+  border-color:rgba(96,165,250,0.36);
+  box-shadow:0 10px 24px rgba(37,99,235,0.2);
+}
+.chartShell{
+  position:relative;
+  overflow:hidden;
+}
+.chartShell::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:radial-gradient(700px 140px at 20% -20%, rgba(96,165,250,0.10), transparent 55%);
+}
+.usageLead{
+  margin-top:4px;
+  margin-bottom:14px;
+  color:var(--text-soft);
+  font-size:14px;
+  font-weight:600;
+}
+.chartMetaProfessional{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+  margin-top:14px;
+}
+.statBadge{
+  min-height:82px;
+  border-radius:18px;
+  background:linear-gradient(180deg, rgba(17,27,49,0.96), rgba(12,22,42,0.96));
+  border:1px solid var(--line-strong);
+  padding:16px 18px;
+}
+.statBadge span{
+  display:block;
+  font-size:13px;
+  color:var(--text-soft);
+  font-weight:700;
+  margin-bottom:8px;
+}
+.statBadge b{
+  display:block;
+  font-size:32px;
+  letter-spacing:-0.03em;
+}
+.statHint{
+  font-size:12px;
+  color:rgba(191,219,254,0.72);
+  font-weight:700;
+}
+.chartWrap{
+  margin-top:16px;
+  border-radius:18px;
+  background:linear-gradient(180deg, rgba(17,28,52,0.82), rgba(14,24,44,0.88));
+  border:1px solid rgba(148,163,184,0.14);
+}
+.small{color:var(--text-soft);}
+@media (max-width: 900px){
+  .chartMetaProfessional{ grid-template-columns:1fr; }
+}
+
 </style>
 </head>
 <body>
@@ -305,7 +444,7 @@ async function sendRedemptionUpdate(id, status){
 }
 
 let promotions = [];
-let totalCount = parseInt(localStorage.getItem("kiosk_total")) || 0;
+let totalCount = 0;
 let focusMode = false;
 let activeTab = (localStorage.getItem("kiosk_tab") || "promo");
 let pendingPromoIds = new Set();
@@ -458,7 +597,7 @@ let usageStats = {
   ready:false,
   redeemsToday:0,
   redeemsTotal:0,
-  usersToday:0,
+  totalRegisteredUsers:0,
   labels:[],
   redeemsSeries:[],
   usersSeries:[]
@@ -533,92 +672,76 @@ function startOfNDaysAgoLocalISO(daysAgo){
 }
 
 async function loadUsageStats(force=false){
-  // keep it light: refresh max every 30s (or forced)
   const nowMs = Date.now();
   if(!force && (nowMs - lastUsageFetch) < 30000) return;
   lastUsageFetch = nowMs;
 
-  try{
-    const sinceISO = startOfNDaysAgoLocalISO(13); // last 14 days incl today
-    const todayISO = startOfTodayLocalISO();
+  const sinceISO = startOfNDaysAgoLocalISO(6); // ultimi 7 giorni incluso oggi
 
-    // Totals (count only, no rows)
-    const { count: totalApproved, error: eTot } = await sb
+  try{
+    const totalApprovedReq = sb
       .from("redemptions")
       .select("id", { count: "exact", head: true })
       .eq("status", "approved");
-    if(eTot) throw eTot;
 
-    const { count: todayApproved, error: eToday } = await sb
-      .from("redemptions")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "approved")
-      .gte("created_at", todayISO);
-    if(eToday) throw eToday;
-
-    // Series: approved redemptions last 14 days
-    const { data: redRows, error: eRed } = await sb
+    const redRowsReq = sb
       .from("redemptions")
       .select("created_at")
       .eq("status", "approved")
       .gte("created_at", sinceISO)
       .limit(5000);
-    if(eRed) throw eRed;
 
-    // Users series: profiles created last 14 days
-    const { data: userRows, error: eUsr } = await sb
-      .from("profiles")
-      .select("created_at")
-      .gte("created_at", sinceISO)
-      .limit(5000);
-    if(eUsr) throw eUsr;
+    const clientsCountReq = sb
+      .from("clients")
+      .select("id", { count: "exact", head: true });
 
-    // Users today
-    const { count: usersToday, error: eUsersToday } = await sb
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", todayISO);
-    if(eUsersToday) throw eUsersToday;
+    const [totRes, rowsRes, clientsRes] = await Promise.allSettled([totalApprovedReq, redRowsReq, clientsCountReq]);
 
-    // Build day buckets
+    const totalApproved = (totRes.status === 'fulfilled' && !totRes.value.error) ? (totRes.value.count || 0) : 0;
+    const redRows = (rowsRes.status === 'fulfilled' && !rowsRes.value.error) ? (rowsRes.value.data || []) : [];
+
+    let totalRegisteredUsers = 0;
+    if(clientsRes.status === 'fulfilled' && !clientsRes.value.error){
+      totalRegisteredUsers = clientsRes.value.count || 0;
+    }else{
+      // fallback robusto: se il count head fallisce, prova lettura minima
+      try{
+        const fallback = await sb.from("clients").select("id");
+        if(!fallback.error) totalRegisteredUsers = (fallback.data || []).length;
+      }catch(_e){}
+    }
+
     const labels = [];
+    const chartLabels = [];
     const redeemsMap = {};
-    const usersMap = {};
 
-    for(let i=13;i>=0;i--){
+    for(let i=6;i>=0;i--){
       const d = new Date();
       d.setHours(0,0,0,0);
       d.setDate(d.getDate()-i);
       const key = dateKeyLocal(d);
       labels.push(key);
+      chartLabels.push(String(d.getDate()).padStart(2,"0"));
       redeemsMap[key]=0;
-      usersMap[key]=0;
     }
 
-    (redRows||[]).forEach(r=>{
+    redRows.forEach(r=>{
       const key = dateKeyLocal(new Date(r.created_at));
       if(redeemsMap[key] !== undefined) redeemsMap[key]++;
-    });
-    (userRows||[]).forEach(r=>{
-      const key = dateKeyLocal(new Date(r.created_at));
-      if(usersMap[key] !== undefined) usersMap[key]++;
     });
 
     usageStats = {
       ready:true,
-      redeemsToday: todayApproved || 0,
-      redeemsTotal: totalApproved || 0,
-      usersToday: usersToday || 0,
-      labels,
-      redeemsSeries: labels.map(k=>redeemsMap[k]||0),
-      usersSeries: labels.map(k=>usersMap[k]||0)
+      redeemsTotal: totalApproved,
+      totalRegisteredUsers,
+      labels: chartLabels,
+      redeemsSeries: labels.map(k=>redeemsMap[k]||0)
     };
 
-    // refresh UI bits + chart if visible
+    totalCount = totalApproved;
     renderAll();
   }catch(e){
-    console.error(e);
-    // don't break kiosk if stats fail
+    console.error("loadUsageStats error", e);
   }
 }
 
@@ -639,13 +762,23 @@ function ensureUsageChart(){
       {
         label: "Riscatti approvati",
         data: usageStats.redeemsSeries,
-        tension: 0.25,
+        tension: 0.35,
+        borderColor: '#39aafc',
+        pointBackgroundColor: '#39aafc',
+        pointBorderColor: '#39aafc',
+        pointRadius: 3,
+        borderWidth: 3,
+        fill: true,
+        backgroundColor(context){
+          const chart = context.chart;
+          const {ctx, chartArea} = chart;
+          if(!chartArea) return 'rgba(57,170,252,0.18)';
+          const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          gradient.addColorStop(0, 'rgba(57,170,252,0.28)');
+          gradient.addColorStop(1, 'rgba(57,170,252,0.02)');
+          return gradient;
+        },
       },
-      {
-        label: "Nuovi utenti",
-        data: usageStats.usersSeries,
-        tension: 0.25,
-      }
     ]
   };
 
@@ -654,12 +787,12 @@ function ensureUsageChart(){
     maintainAspectRatio: false,
     animation: false,
     plugins: {
-      legend: { labels: { color: "#e5e7eb", font: { weight: "700" } } },
+      legend: { display: false },
       tooltip: { enabled: true }
     },
     scales: {
-      x: { ticks: { color: "rgba(229,231,235,0.75)", maxRotation: 0, autoSkip: true }, grid: { color: "rgba(148,163,184,0.08)" } },
-      y: { ticks: { color: "rgba(229,231,235,0.75)" }, grid: { color: "rgba(148,163,184,0.08)" }, beginAtZero: true }
+      x: { ticks: { color: "rgba(229,231,235,0.78)", maxRotation: 0, autoSkip: false, font:{weight:'700'} }, grid: { display:false } },
+      y: { ticks: { color: "rgba(229,231,235,0.62)", precision:0, stepSize:5 }, border:{display:false}, grid: { color: "rgba(148,163,184,0.08)" }, beginAtZero: true }
     }
   };
 
@@ -838,8 +971,6 @@ async function approveReward(id, title=""){
       .update({status:"approved", approved_at: new Date().toISOString()})
       .eq("id", id);
     if(error) throw error;
-    totalCount++;
-    localStorage.setItem("kiosk_total", totalCount);
     showToast("✅ Premio approvato: " + (title || id), "ok");
   }catch(e){
     console.error(e);
@@ -954,15 +1085,26 @@ function renderDashboard(data){
 
   const usageCard = `
     <div class="container" id="usageCard">
-      <div class="card">
-        <div class="promo">Utilizzo App</div>
-        <div class="small">Ultimi 14 giorni • Riscatti totali approvati: <b>${usageStats?.ready ? usageStats.redeemsTotal : "—"}</b></div>
-        <div class="chartMeta">
-          <div class="badge">Riscatti oggi: <b>${usageStats?.ready ? usageStats.redeemsToday : "—"}</b></div>
-          <div class="badge">Nuovi utenti oggi: <b>${usageStats?.ready ? usageStats.usersToday : "—"}</b></div>
-          <div class="badge">Totale: <b>${totalCount}</b></div>
+      <div class="card chartShell">
+        <div class="promo">Panoramica utilizzo</div>
+        <div class="usageLead">Ultimi 7 giorni • riscatti promo approvati</div>
+        <div class="chartMeta chartMetaProfessional">
+          <div class="badge statBadge">
+            <div>
+              <span>Utenti registrati</span>
+              <b>${usageStats?.ready ? usageStats.totalRegisteredUsers : "—"}</b>
+              <div class="statHint">letti da tabella clients</div>
+            </div>
+          </div>
+          <div class="badge statBadge">
+            <div>
+              <span>Totale promo</span>
+              <b>${usageStats?.ready ? usageStats.redeemsTotal : "—"}</b>
+              <div class="statHint">riscatti approvati complessivi</div>
+            </div>
+          </div>
         </div>
-        <div class="chartWrap" style="height:260px;">
+        <div class="chartWrap" style="height:320px;">
           <canvas id="usageChart"></canvas>
         </div>
       </div>
@@ -1013,8 +1155,6 @@ async function approve(id, promoTitle=""){
 
     if(error) throw error;
 
-    totalCount++;
-    localStorage.setItem("kiosk_total",totalCount);
     await sendRedemptionUpdate(id, "approved");
     showToast("✅ Convalidata: " + (promoTitle || id), "ok");
   }catch(e){
