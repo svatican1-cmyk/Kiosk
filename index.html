@@ -691,25 +691,10 @@ async function loadUsageStats(force=false){
       .gte("created_at", sinceISO)
       .limit(5000);
 
-    const clientsCountReq = sb
-      .from("clients")
-      .select("id", { count: "exact", head: true });
-
-    const [totRes, rowsRes, clientsRes] = await Promise.allSettled([totalApprovedReq, redRowsReq, clientsCountReq]);
+    const [totRes, rowsRes] = await Promise.allSettled([totalApprovedReq, redRowsReq]);
 
     const totalApproved = (totRes.status === 'fulfilled' && !totRes.value.error) ? (totRes.value.count || 0) : 0;
     const redRows = (rowsRes.status === 'fulfilled' && !rowsRes.value.error) ? (rowsRes.value.data || []) : [];
-
-    let totalRegisteredUsers = 0;
-    if(clientsRes.status === 'fulfilled' && !clientsRes.value.error){
-      totalRegisteredUsers = clientsRes.value.count || 0;
-    }else{
-      // fallback robusto: se il count head fallisce, prova lettura minima
-      try{
-        const fallback = await sb.from("clients").select("id");
-        if(!fallback.error) totalRegisteredUsers = (fallback.data || []).length;
-      }catch(_e){}
-    }
 
     const labels = [];
     const chartLabels = [];
@@ -733,7 +718,6 @@ async function loadUsageStats(force=false){
     usageStats = {
       ready:true,
       redeemsTotal: totalApproved,
-      totalRegisteredUsers,
       labels: chartLabels,
       redeemsSeries: labels.map(k=>redeemsMap[k]||0)
     };
@@ -1085,31 +1069,15 @@ function renderDashboard(data){
 
   const usageCard = `
     <div class="container" id="usageCard">
-      <div class="card chartShell">
+      <div class="card chartShell chartOnlyShell">
         <div class="promo">Panoramica utilizzo</div>
-        <div class="usageLead">Ultimi 7 giorni • riscatti promo approvati</div>
-        <div class="chartMeta chartMetaProfessional">
-          <div class="badge statBadge">
-            <div>
-              <span>Utenti registrati</span>
-              <b>${usageStats?.ready ? usageStats.totalRegisteredUsers : "—"}</b>
-              <div class="statHint">letti da tabella clients</div>
-            </div>
-          </div>
-          <div class="badge statBadge">
-            <div>
-              <span>Totale promo</span>
-              <b>${usageStats?.ready ? usageStats.redeemsTotal : "—"}</b>
-              <div class="statHint">riscatti approvati complessivi</div>
-            </div>
-          </div>
-        </div>
-        <div class="chartWrap" style="height:320px;">
+        <div class="usageLead">Andamento riscatti promo approvati • ultimi 7 giorni</div>
+        <div class="chartWrap chartWrapLarge" style="height:360px;">
           <canvas id="usageChart"></canvas>
         </div>
       </div>
     </div>
-  `;
+  `
 
     const preservedUsage = document.getElementById("usageCard");
   if(preservedUsage){ preservedUsage.remove(); }
