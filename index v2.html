@@ -1,0 +1,3235 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<title>Kiosk</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+body{
+  margin:0;
+  font-family:Inter,system-ui;
+  background:#0f172a;
+  color:white;
+}
+.header{
+  padding:20px;
+  background:#111827;
+  position:sticky;
+  top:0;
+  z-index:10;
+  border-bottom:1px solid #1f2937;
+}
+.title{
+  font-size:28px;
+  font-weight:700;
+}
+.stats{
+  margin-top:8px;
+  font-size:16px;
+  opacity:0.8;
+}
+.container{
+  padding:20px;
+}
+.card{
+  background:#1e293b;
+  padding:20px;
+  border-radius:16px;
+  margin-bottom:20px;
+  box-shadow:0 10px 25px rgba(0,0,0,0.4);
+  border:2px solid transparent;
+  transition:0.3s;
+}
+
+.card.selected{
+  outline:2px solid rgba(96,165,250,0.95);
+  box-shadow:0 0 0 4px rgba(96,165,250,0.15);
+}
+.card.selected .buttons .approve{
+  filter:brightness(1.05);
+}
+.kbdHint{
+  margin-top:10px;
+  padding:10px 12px;
+  border-radius:12px;
+  background:rgba(59,130,246,0.12);
+  border:1px solid rgba(59,130,246,0.25);
+  font-size:13px;
+  color:rgba(226,232,240,0.95);
+}
+.waiting{
+  animation:blink 1.2s infinite;
+}
+@keyframes blink{
+  0%{border-color:#22c55e;}
+  50%{border-color:#3b82f6;}
+  100%{border-color:#22c55e;}
+}
+.promo{
+  font-size:22px;
+  font-weight:600;
+}
+.user{
+  margin-top:8px;
+  font-size:16px;
+  opacity:0.8;
+}
+.time{
+  margin-top:4px;
+  font-size:14px;
+  opacity:0.6;
+}
+.buttons{
+  margin-top:15px;
+  display:flex;
+  gap:10px;
+}
+.buttons button{
+  flex:1;
+}
+button{
+  padding:14px;
+  font-size:16px;
+  border-radius:10px;
+  border:none;
+  cursor:pointer;
+  font-weight:600;
+}
+.approve{
+  background:#22c55e;
+  color:black;
+}
+.cancel{
+  background:#ef4444;
+  color:white;
+}
+.login{
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+  justify-content:center;
+  align-items:center;
+  gap:10px;
+}
+input{
+  padding:12px;
+  font-size:16px;
+  border-radius:8px;
+  border:none;
+  width:250px;
+}
+.loginBtn{
+  width:250px;
+  padding:12px;
+  border-radius:10px;
+  font-size:16px;
+  font-weight:700;
+  background:#e5e7eb;
+  color:#0f172a;
+}
+
+.toast{
+  position:fixed;
+  left:50%;
+  bottom:18px;
+  transform:translateX(-50%);
+  background:rgba(17,24,39,0.92);
+  border:1px solid rgba(148,163,184,0.35);
+  padding:12px 16px;
+  border-radius:14px;
+  box-shadow:0 12px 30px rgba(0,0,0,0.5);
+  font-size:16px;
+  font-weight:700;
+  max-width:90vw;
+  display:none;
+  z-index:9999;
+}
+.toast.show{ display:block; animation:toastIn 220ms ease-out; }
+@keyframes toastIn{ from{opacity:0; transform:translateX(-50%) translateY(8px);} to{opacity:1; transform:translateX(-50%) translateY(0);} }
+
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:14px;
+  font-weight:700;
+  border:1px solid rgba(148,163,184,0.25);
+  background:rgba(15,23,42,0.6);
+}
+.dot{ width:10px; height:10px; border-radius:999px; background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,0.15); }
+.dot.off{ background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,0.15); }
+.badge.onlinePulse{ animation:onlinePulse 2.6s ease-in-out infinite; }
+@keyframes onlinePulse{ 0%,100%{opacity:1;} 50%{opacity:0.55;} }
+
+.toprow{
+  margin-top:10px;
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+button:disabled{
+  opacity:0.55;
+  cursor:not-allowed;
+  filter:saturate(0.8);
+}
+.small{
+  font-size:13px;
+  opacity:0.7;
+  margin-top:6px;
+}
+
+
+.tabs{
+  display:flex;
+  gap:10px;
+  margin-top:12px;
+}
+.tab{
+  flex:1;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid rgba(148,163,184,0.25);
+  background:rgba(15,23,42,0.55);
+  font-weight:800;
+  text-align:center;
+  cursor:pointer;
+  user-select:none;
+}
+.tab.active{
+  background:rgba(59,130,246,0.65);
+  border-color:rgba(59,130,246,0.55);
+}
+.countpill{
+  margin-left:8px;
+  padding:2px 8px;
+  border-radius:999px;
+  background:rgba(0,0,0,0.35);
+  border:1px solid rgba(148,163,184,0.25);
+  font-size:12px;
+  font-weight:900;
+}
+
+/* Usage chart */
+.chartWrap{
+  margin-top:12px;
+  background:rgba(15,23,42,0.45);
+  border:1px solid rgba(148,163,184,0.18);
+  border-radius:14px;
+  padding:12px;
+}
+.chartMeta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:10px;
+}
+.chartMeta .badge{ background:rgba(15,23,42,0.45); }
+
+
+/* --- Mobile layout tweaks --- */
+@media (max-width: 520px){
+  .header{ padding:14px; }
+  .container{ padding:12px; }
+  .title{ font-size:22px; }
+  .stats{ font-size:14px; }
+  .usageHeader{ gap:8px; }
+  .updatePill{ margin-left:0; }
+  .usageMeta{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; }
+  .usageMeta .badge{ padding:10px; font-size:12px; }
+  .chartGrid{ grid-template-columns: 1fr; gap:10px; }
+  .chartWrap{ padding:10px; min-height:150px; }
+  .chartTitle{ font-size:14px; }
+}
+
+/* Small-height screens (old phones): keep charts compact */
+@media (max-width: 520px) and (max-height: 800px){
+  .chartWrap{ min-height:135px; }
+}
+
+
+.chartWrap h3{ margin:0 0 8px 0; font-size:16px; }.chartMetaProfessional{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+}
+.statBadge{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:14px 16px;
+  border-radius:14px;
+  background:linear-gradient(180deg, rgba(30,41,59,0.88), rgba(15,23,42,0.9));
+  border:1px solid rgba(96,165,250,0.18);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.statBadge span{
+  font-size:13px;
+  color:rgba(226,232,240,0.78);
+  font-weight:700;
+}
+.statBadge b{
+  font-size:22px;
+  color:#fff;
+}
+@media (max-width: 900px){
+  .chartMetaProfessional{ grid-template-columns:1fr; }
+  .statBadge b{ font-size:20px; }
+}
+
+
+:root{
+  --bg:#081227;
+  --bg-2:#0d1a33;
+  --panel:#16233f;
+  --panel-2:#1b2a49;
+  --line:rgba(148,163,184,0.16);
+  --line-strong:rgba(96,165,250,0.24);
+  --text-soft:rgba(226,232,240,0.78);
+  --accent:#60a5fa;
+}
+body{
+  background:
+    radial-gradient(1200px 420px at 50% -10%, rgba(59,130,246,0.18), transparent 60%),
+    linear-gradient(180deg, #081227 0%, #0a1530 100%);
+  min-height:100vh;
+}
+.header{
+  background:linear-gradient(180deg, rgba(6,14,30,0.92), rgba(9,19,41,0.88));
+  backdrop-filter: blur(10px);
+}
+.titleBlock{
+  text-align:center;
+  margin-bottom:14px;
+}
+.brandTitle{
+  font-size:40px;
+  line-height:1;
+  font-weight:800;
+  letter-spacing:-0.03em;
+}
+.brandSub{
+  margin-top:6px;
+  color:var(--text-soft);
+  font-size:15px;
+  font-weight:600;
+}
+.sectionTitle{
+  font-size:22px;
+  font-weight:800;
+  letter-spacing:-0.02em;
+}
+.card{
+  background:linear-gradient(180deg, rgba(24,37,64,0.96), rgba(16,28,52,0.97));
+  border:1px solid var(--line);
+  box-shadow:0 18px 42px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.tabs{gap:12px;}
+.tab{
+  background:rgba(11,22,43,0.68);
+  border-color:rgba(148,163,184,0.18);
+}
+.tab.active{
+  background:linear-gradient(180deg, rgba(59,130,246,0.85), rgba(37,99,235,0.78));
+  border-color:rgba(96,165,250,0.36);
+  box-shadow:0 10px 24px rgba(37,99,235,0.2);
+}
+.chartShell{
+  position:relative;
+  overflow:hidden;
+}
+.chartShell::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:radial-gradient(700px 140px at 20% -20%, rgba(96,165,250,0.10), transparent 55%);
+}
+.usageLead{
+  margin-top:4px;
+  margin-bottom:14px;
+  color:var(--text-soft);
+  font-size:14px;
+  font-weight:600;
+}
+.chartMetaProfessional{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+  margin-top:14px;
+}
+.statBadge{
+  min-height:82px;
+  border-radius:18px;
+  background:linear-gradient(180deg, rgba(17,27,49,0.96), rgba(12,22,42,0.96));
+  border:1px solid var(--line-strong);
+  padding:16px 18px;
+}
+.statBadge span{
+  display:block;
+  font-size:13px;
+  color:var(--text-soft);
+  font-weight:700;
+  margin-bottom:8px;
+}
+.statBadge b{
+  display:block;
+  font-size:32px;
+  letter-spacing:-0.03em;
+}
+.statHint{
+  font-size:12px;
+  color:rgba(191,219,254,0.72);
+  font-weight:700;
+}
+.chartWrap{
+  margin-top:16px;
+  border-radius:18px;
+  background:linear-gradient(180deg, rgba(17,28,52,0.82), rgba(14,24,44,0.88));
+  border:1px solid rgba(148,163,184,0.14);
+}
+.small{color:var(--text-soft);}
+@media (max-width: 900px){
+  .chartMetaProfessional{ grid-template-columns:1fr; }
+}
+
+
+/* Compact daily activity */
+.activityGrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin-top:14px}.dayBox{min-height:74px;border-radius:16px;background:linear-gradient(180deg,rgba(17,27,49,.96),rgba(12,22,42,.96));border:1px solid rgba(96,165,250,.16);padding:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}.dayBox .day{font-size:13px;color:rgba(226,232,240,.72);font-weight:800;margin-bottom:8px}.dayStats{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.miniPill{display:inline-flex;gap:5px;align-items:center;padding:5px 8px;border-radius:999px;font-size:12px;font-weight:900;border:1px solid rgba(148,163,184,.18)}.miniPill.ok{background:rgba(34,197,94,.12);color:#bbf7d0}.miniPill.bad{background:rgba(239,68,68,.12);color:#fecaca}.usersToolbar{display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap}.searchInput{flex:1;min-width:240px;width:auto;background:rgba(15,23,42,.75);color:white;border:1px solid rgba(148,163,184,.24);outline:none}.searchInput:focus{border-color:rgba(96,165,250,.65);box-shadow:0 0 0 4px rgba(96,165,250,.10)}.userRow{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:14px;border-radius:16px;background:rgba(15,23,42,.48);border:1px solid rgba(148,163,184,.14);margin-top:10px}.userEmail{font-size:15px;font-weight:850;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.userPoints{min-width:74px;text-align:center;padding:8px 10px;border-radius:999px;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.22);font-weight:900}.pointButtons{display:flex;gap:8px}.pointBtn{width:42px;height:42px;padding:0;border-radius:13px;font-size:24px;line-height:1;display:flex;align-items:center;justify-content:center}.pointBtn.plus{background:#22c55e;color:#07110a}.pointBtn.minus{background:#ef4444;color:#fff}.emptyBox{padding:22px;border-radius:16px;background:rgba(15,23,42,.42);border:1px dashed rgba(148,163,184,.24);color:rgba(226,232,240,.74);font-weight:700;margin-top:10px}@media(max-width:760px){.activityGrid{grid-template-columns:1fr}.userRow{grid-template-columns:1fr}.userPoints{width:max-content}.pointButtons{justify-content:flex-start}}
+
+
+
+/* === 2026 Kiosk polish: dark premium + readable activity summary === */
+:root{
+  --k-bg:#071126;
+  --k-panel:#13213d;
+  --k-panel-2:#182a4c;
+  --k-line:rgba(148,163,184,.20);
+  --k-blue:#3b82f6;
+  --k-green:#22c55e;
+  --k-red:#ef4444;
+  --k-text-soft:rgba(226,232,240,.74);
+}
+body{
+  background:
+    radial-gradient(900px 420px at 50% -10%, rgba(59,130,246,.20), transparent 60%),
+    linear-gradient(180deg,#061024 0%,#091631 100%);
+}
+.header{
+  background:linear-gradient(180deg,rgba(6,14,30,.96),rgba(8,18,39,.92));
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid rgba(148,163,184,.16);
+  box-shadow:0 10px 30px rgba(0,0,0,.22);
+}
+.card{
+  background:linear-gradient(180deg,rgba(25,39,69,.98),rgba(14,26,50,.98));
+  border:1px solid rgba(148,163,184,.16);
+  box-shadow:0 22px 50px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.035);
+}
+.tab{
+  min-height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  font-size:18px;
+  border-radius:20px;
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.tab:active{ transform:scale(.985); }
+.tab.active{
+  background:linear-gradient(180deg,rgba(59,130,246,.96),rgba(37,99,235,.86));
+  border-color:rgba(147,197,253,.42);
+  box-shadow:0 14px 32px rgba(37,99,235,.28), inset 0 1px 0 rgba(255,255,255,.10);
+}
+.countpill{
+  min-width:24px;
+  text-align:center;
+  padding:3px 9px;
+  background:rgba(5,10,20,.52);
+}
+.emptyBox{
+  border-radius:24px;
+  padding:30px 22px;
+  border:1px dashed rgba(148,163,184,.26);
+  background:rgba(9,19,41,.52);
+  color:rgba(226,232,240,.72);
+  text-align:center;
+  font-size:18px;
+}
+.refreshBtn{
+  background:linear-gradient(180deg,#f8fafc,#e2e8f0);
+  color:#0f172a;
+  border:1px solid rgba(255,255,255,.35);
+  box-shadow:0 10px 22px rgba(0,0,0,.20);
+}
+.refreshBtn:disabled{ opacity:.65; }
+.searchInput{
+  min-height:52px;
+  border-radius:16px;
+  background:rgba(8,18,39,.68);
+  border:1px solid rgba(148,163,184,.22);
+}
+.userRow{
+  border-radius:24px;
+  padding:18px;
+  background:linear-gradient(180deg,rgba(13,25,49,.86),rgba(10,22,43,.86));
+  border:1px solid rgba(148,163,184,.14);
+}
+.userPoints{ background:rgba(96,165,250,.16); border-color:rgba(96,165,250,.30); }
+.pointBtn{ border-radius:18px; box-shadow:0 12px 22px rgba(0,0,0,.20); }
+
+.activityGridPro{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+  margin-top:16px;
+}
+.activityDayCard{
+  position:relative;
+  overflow:hidden;
+  border-radius:24px;
+  padding:18px;
+  background:linear-gradient(180deg,rgba(11,24,48,.92),rgba(8,19,40,.94));
+  border:1px solid rgba(96,165,250,.18);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+}
+.activityDayCard::before{
+  content:"";
+  position:absolute;
+  inset:-1px;
+  background:radial-gradient(340px 110px at 0% 0%,rgba(34,197,94,.08),transparent 58%);
+  pointer-events:none;
+}
+.activityTop{
+  position:relative;
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  margin-bottom:14px;
+}
+.activityDate{
+  font-size:26px;
+  line-height:1;
+  font-weight:950;
+  letter-spacing:-.03em;
+}
+.activityLabel{
+  margin-top:6px;
+  font-size:13px;
+  color:var(--k-text-soft);
+  font-weight:750;
+}
+.activityTotal{
+  padding:7px 11px;
+  border-radius:999px;
+  background:rgba(96,165,250,.13);
+  border:1px solid rgba(96,165,250,.25);
+  color:#dbeafe;
+  font-weight:950;
+  white-space:nowrap;
+}
+.activityCounts{
+  position:relative;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.activityCountBox{
+  border-radius:18px;
+  padding:13px 12px;
+  border:1px solid rgba(148,163,184,.14);
+  background:rgba(15,23,42,.50);
+}
+.activityCountBox b{
+  display:block;
+  font-size:28px;
+  line-height:1;
+  letter-spacing:-.04em;
+}
+.activityCountBox span{
+  display:block;
+  margin-top:5px;
+  font-size:12px;
+  color:var(--k-text-soft);
+  font-weight:850;
+}
+.activityCountBox.ok b{ color:#86efac; }
+.activityCountBox.bad b{ color:#fca5a5; }
+.activityBar{
+  position:relative;
+  margin-top:14px;
+  height:12px;
+  border-radius:999px;
+  background:rgba(239,68,68,.25);
+  overflow:hidden;
+  border:1px solid rgba(148,163,184,.10);
+}
+.activityBarFill{
+  height:100%;
+  border-radius:999px;
+  background:linear-gradient(90deg,#16a34a,#86efac);
+  min-width:0%;
+  transition:width .3s ease;
+}
+.activityEmptyNote{
+  margin-top:12px;
+  color:rgba(226,232,240,.56);
+  font-size:13px;
+  font-weight:750;
+}
+@media(max-width:760px){
+  .tabs{gap:10px;}
+  .tab{min-height:78px; flex-direction:column; font-size:20px;}
+  .activityGridPro{ grid-template-columns:1fr; }
+  .activityDayCard{ padding:20px; }
+  .activityDate{ font-size:28px; }
+  .activityCountBox b{ font-size:30px; }
+  .usersToolbar{ align-items:stretch; }
+  .searchInput{ width:100%; min-width:0; flex-basis:100%; }
+  .refreshBtn{ width:max-content; }
+}
+
+
+/* Admin manager */
+.adminGrid{
+  display:grid;
+  grid-template-columns:minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap:20px;
+  align-items:start;
+}
+.adminPanel{
+  background:linear-gradient(180deg, rgba(24,37,64,0.96), rgba(16,28,52,0.98));
+  border:1px solid rgba(148,163,184,.18);
+  border-radius:22px;
+  padding:18px;
+  box-shadow:0 18px 42px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.035);
+}
+.adminPanelTitle{
+  font-size:22px;
+  font-weight:900;
+  letter-spacing:-.03em;
+  margin-bottom:6px;
+}
+.adminHint{
+  color:rgba(226,232,240,.68);
+  font-size:13px;
+  font-weight:650;
+  line-height:1.45;
+  margin-bottom:14px;
+}
+.formGrid{
+  display:grid;
+  gap:12px;
+}
+.formRow2{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.fieldLabel{
+  display:block;
+  margin-bottom:6px;
+  color:rgba(226,232,240,.72);
+  font-size:12px;
+  font-weight:850;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.adminInput,.adminTextarea,.adminSelect{
+  width:100%;
+  box-sizing:border-box;
+  border:1px solid rgba(148,163,184,.18);
+  background:rgba(15,23,42,.78);
+  color:#fff;
+  border-radius:14px;
+  padding:13px 12px;
+  font-size:15px;
+  outline:none;
+}
+.adminTextarea{
+  min-height:92px;
+  resize:vertical;
+  line-height:1.45;
+}
+.adminInput:focus,.adminTextarea:focus,.adminSelect:focus{
+  border-color:rgba(96,165,250,.75);
+  box-shadow:0 0 0 4px rgba(96,165,250,.14);
+}
+.adminBtn{
+  border:none;
+  border-radius:14px;
+  padding:13px 15px;
+  font-size:15px;
+  font-weight:900;
+  cursor:pointer;
+  background:#fbbf24;
+  color:#111827;
+  box-shadow:0 12px 26px rgba(251,191,36,.16);
+}
+.adminBtn.secondary{
+  background:rgba(255,255,255,.08);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:none;
+}
+.adminBtn.danger{
+  background:rgba(239,68,68,.15);
+  color:#fecaca;
+  border:1px solid rgba(239,68,68,.28);
+  box-shadow:none;
+}
+.adminBtn:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
+.adminList{
+  display:grid;
+  gap:12px;
+}
+.adminItem{
+  display:grid;
+  grid-template-columns:70px minmax(0,1fr) auto;
+  gap:14px;
+  align-items:center;
+  border:1px solid rgba(148,163,184,.15);
+  border-radius:20px;
+  background:rgba(15,23,42,.54);
+  padding:12px;
+}
+.adminThumb{
+  width:70px;
+  height:70px;
+  border-radius:18px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.10);
+  overflow:hidden;
+  display:grid;
+  place-items:center;
+  font-size:30px;
+}
+.adminThumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.adminItemTitle{
+  font-size:17px;
+  font-weight:950;
+  line-height:1.15;
+}
+.adminItemMeta{
+  margin-top:5px;
+  color:rgba(226,232,240,.66);
+  font-size:12px;
+  font-weight:750;
+  line-height:1.4;
+}
+.inlineEdit{
+  margin-top:10px;
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+}
+.inlineEdit input{
+  width:100%;
+  min-width:0;
+  padding:10px;
+  font-size:13px;
+  border-radius:12px;
+}
+.adminEmpty{
+  border:1px dashed rgba(148,163,184,.25);
+  border-radius:20px;
+  color:rgba(226,232,240,.68);
+  padding:20px;
+  text-align:center;
+  font-weight:750;
+}
+@media(max-width:900px){
+  .adminGrid{ grid-template-columns:1fr; }
+  .adminItem{ grid-template-columns:58px minmax(0,1fr); }
+  .adminItem > .adminActions{ grid-column:1 / -1; display:flex; gap:8px; justify-content:flex-end; }
+  .formRow2,.inlineEdit{ grid-template-columns:1fr; }
+}
+
+
+/* Image picker */
+.pickerBackdrop{
+  position:fixed;
+  inset:0;
+  z-index:9998;
+  background:rgba(2,6,23,.70);
+  backdrop-filter:blur(8px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+}
+.pickerModal{
+  width:min(920px, 96vw);
+  max-height:86vh;
+  overflow:hidden;
+  border-radius:26px;
+  background:linear-gradient(180deg, rgba(15,23,42,.98), rgba(8,16,34,.98));
+  border:1px solid rgba(148,163,184,.20);
+  box-shadow:0 28px 80px rgba(0,0,0,.55);
+  display:flex;
+  flex-direction:column;
+}
+.pickerHead{
+  padding:18px;
+  border-bottom:1px solid rgba(148,163,184,.14);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+}
+.pickerTitle{
+  font-size:22px;
+  font-weight:950;
+}
+.pickerSub{
+  margin-top:3px;
+  color:rgba(226,232,240,.62);
+  font-size:13px;
+  font-weight:700;
+}
+.pickerBody{
+  padding:18px;
+  overflow:auto;
+}
+.pickerGrid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
+  gap:12px;
+}
+.pickerItem{
+  border:1px solid rgba(148,163,184,.16);
+  background:rgba(15,23,42,.70);
+  border-radius:18px;
+  overflow:hidden;
+  padding:8px;
+  color:white;
+  cursor:pointer;
+  text-align:left;
+}
+.pickerItem:hover{
+  border-color:rgba(96,165,250,.58);
+  background:rgba(30,41,59,.88);
+}
+.pickerItem img{
+  width:100%;
+  aspect-ratio:1/1;
+  object-fit:cover;
+  border-radius:14px;
+  background:rgba(255,255,255,.06);
+}
+.pickerName{
+  margin-top:7px;
+  font-size:11px;
+  color:rgba(226,232,240,.68);
+  font-weight:800;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+}
+.pickerPreview{
+  margin-top:8px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-height:44px;
+}
+.pickerPreview img{
+  width:44px;
+  height:44px;
+  object-fit:cover;
+  border-radius:12px;
+  border:1px solid rgba(148,163,184,.20);
+}
+.pickerPreviewText{
+  font-size:12px;
+  color:rgba(226,232,240,.66);
+  font-weight:750;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+
+/* Mobile-first calendario gusti */
+.flavorAdminIntro{
+  display:grid;
+  gap:12px;
+}
+.flavorAdminActions{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+}
+.flavorMobileStack{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:14px;
+}
+.flavorMobileCard{
+  background:linear-gradient(180deg, rgba(15,23,42,.98), rgba(11,18,32,.98));
+  border:1px solid rgba(148,163,184,.18);
+  border-radius:24px;
+  padding:14px;
+  box-shadow:0 16px 34px rgba(0,0,0,.32);
+}
+.flavorMobileHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:14px;
+}
+.flavorDayBadge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:54px;
+  height:38px;
+  border-radius:14px;
+  background:#fbbf24;
+  color:#111827;
+  font-size:15px;
+  font-weight:950;
+  letter-spacing:.05em;
+}
+.flavorMobileTitle{
+  font-size:18px;
+  font-weight:950;
+  line-height:1.1;
+}
+.flavorMobileSub{
+  margin-top:3px;
+  color:rgba(226,232,240,.58);
+  font-size:12px;
+  font-weight:750;
+}
+.flavorImageBox{
+  display:grid;
+  grid-template-columns:86px minmax(0,1fr);
+  gap:12px;
+  align-items:center;
+}
+.flavorImagePreview{
+  width:86px;
+  height:86px;
+  border-radius:20px;
+  overflow:hidden;
+  display:grid;
+  place-items:center;
+  background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.10);
+  font-size:30px;
+}
+.flavorImagePreview img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.flavorHiddenInput{
+  position:absolute;
+  width:1px;
+  height:1px;
+  opacity:0;
+  pointer-events:none;
+}
+@media(min-width:780px){
+  .flavorAdminActions{
+    grid-template-columns:auto auto auto;
+    justify-content:start;
+  }
+  .flavorMobileStack{
+    grid-template-columns:1fr 1fr;
+  }
+}
+
+
+/* Mobile-first gestione promo */
+.promoMobileStack{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:14px;
+}
+.promoMobileCard{
+  background:linear-gradient(180deg, rgba(15,23,42,.98), rgba(11,18,32,.98));
+  border:1px solid rgba(148,163,184,.18);
+  border-radius:24px;
+  padding:14px;
+  box-shadow:0 16px 34px rgba(0,0,0,.32);
+}
+.promoMobileHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:14px;
+}
+.promoDayBadge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:54px;
+  height:38px;
+  border-radius:14px;
+  background:#60a5fa;
+  color:#061024;
+  font-size:15px;
+  font-weight:950;
+  letter-spacing:.03em;
+}
+.promoMobileTitle{
+  font-size:18px;
+  font-weight:950;
+  line-height:1.1;
+}
+.promoMobileSub{
+  margin-top:3px;
+  color:rgba(226,232,240,.58);
+  font-size:12px;
+  font-weight:750;
+}
+.promoImageBox{
+  display:grid;
+  grid-template-columns:86px minmax(0,1fr);
+  gap:12px;
+  align-items:center;
+}
+.promoImagePreview{
+  width:86px;
+  height:86px;
+  border-radius:20px;
+  overflow:hidden;
+  display:grid;
+  place-items:center;
+  background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.10);
+  font-size:30px;
+}
+.promoImagePreview img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.promoHiddenInput{
+  position:absolute;
+  width:1px;
+  height:1px;
+  opacity:0;
+  pointer-events:none;
+}
+.promoListCard{
+  display:grid;
+  grid-template-columns:76px minmax(0,1fr);
+  gap:12px;
+  align-items:center;
+  background:linear-gradient(180deg, rgba(14,25,48,.92), rgba(10,20,39,.94));
+  border:1px solid rgba(148,163,184,.16);
+  border-radius:22px;
+  padding:12px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+}
+.promoListThumb{
+  width:76px;
+  height:76px;
+  border-radius:20px;
+  overflow:hidden;
+  display:grid;
+  place-items:center;
+  background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.10);
+  font-size:30px;
+}
+.promoListThumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.promoBadgeMini{
+  display:inline-flex;
+  margin-top:7px;
+  width:max-content;
+  max-width:100%;
+  border-radius:999px;
+  padding:5px 9px;
+  background:rgba(251,191,36,.14);
+  border:1px solid rgba(251,191,36,.24);
+  color:#fde68a;
+  font-size:11px;
+  font-weight:900;
+}
+.promoActionsMobile{
+  grid-column:1 / -1;
+  display:grid;
+  grid-template-columns:1fr;
+  gap:8px;
+  margin-top:2px;
+}
+
+/* Staff workspace: large controls, clear groups, no decorative motion. */
+:root{color-scheme:light;--text-soft:#706a62;--k-text-soft:#706a62;--line:#e8dfd1;--k-line:#e8dfd1;--accent:#7956a8}
+*{box-sizing:border-box}body{background:#fff8ef;color:#27231e;min-height:100vh}
+.header{position:relative;background:#fffdf9;border-bottom:1px solid #e8dfd1;box-shadow:none;padding:20px max(20px,calc((100vw - 1200px)/2))}
+.container{max-width:1240px;margin:auto;padding:20px}.title{font-size:25px}.tabs{display:flex;flex-wrap:wrap;gap:8px}
+.tab{flex:0 1 auto;min-height:46px;min-width:130px;padding:10px 14px;font-size:14px;border-radius:12px;background:#f5f1eb;color:#51483e;border:1px solid #e8dfd1;box-shadow:none}
+.tab.active{background:#eee4fc;border-color:#bca1df;color:#4e327a;box-shadow:none}.countpill{background:#fff;color:#4e327a;border:0;min-width:20px}
+.card,.adminPanel,.promoMobileCard,.flavorMobileCard,.activityDayCard,.pickerModal{background:#fff;border:1px solid #e8dfd1;box-shadow:0 4px 14px #513d1710;border-radius:20px;color:#27231e}
+.adminItem,.promoListCard,.userRow,.activityCountBox,.chartWrap,.statBadge,.dayBox{background:#fffaf2;border-color:#e8dfd1;color:#27231e;box-shadow:none}
+.chartShell::before,.activityDayCard::before{display:none}.adminHint,.fieldLabel,.adminItemMeta,.promoMobileSub,.flavorMobileSub,.pickerSub,.pickerName,.pickerPreviewText,.activityEmptyNote,.activityLabel,.time,.small,.usageLead,.flavorDaySub{color:#706a62;opacity:1}
+.badge,.promoBadgeMini,.promoDayBadge,.flavorDayBadge,.activityTotal,.userPoints{background:#f2eafc;border:1px solid #dfd2ef;color:#5e427d}.badge.onlinePulse{animation:none}.dot{box-shadow:none}
+.waiting{animation:none;border:2px solid #e8bc67}.card.selected{outline:3px solid #9c7bc8;box-shadow:none}
+.adminInput,.adminTextarea,.adminSelect,.searchInput,.inlineEdit input,.login input{background:#fff;color:#27231e;border:1px solid #d8cdbb;border-radius:12px;min-height:46px;box-shadow:none}
+input:focus,select:focus,textarea:focus{outline:3px solid #d8c5f2;outline-offset:1px}.adminInput:focus,.adminTextarea:focus,.adminSelect:focus{border-color:#9c7bc8;box-shadow:none}
+.adminBtn,.loginBtn{background:#ffde83;color:#513715;box-shadow:none;border-radius:12px}.adminBtn.secondary,.refreshBtn{background:#f2eafc;border:1px solid #dfd2ef;color:#5e427d;box-shadow:none}
+.adminBtn.danger,.cancel,.pointBtn.minus{background:#fff0ed;border:1px solid #eabeb7;color:#993d34;box-shadow:none}
+.approve,.pointBtn.plus{background:#d8f0df;color:#205a34;box-shadow:none;border:1px solid #a5d1b0}
+.adminEmpty,.emptyBox,.kbdHint{background:#fffaf2;border-color:#e8dfd1;color:#706a62}.toast{background:#fffdf9;color:#27231e;box-shadow:0 6px 24px #513d1730;max-width:min(620px,94vw);font-size:14px}
+.activityCountBox.ok b,.miniPill.ok{color:#267046}.activityCountBox.bad b,.miniPill.bad{color:#aa453b}
+.promoListThumb,.adminThumb,.promoImagePreview,.flavorImagePreview,.pickerItem{background:#f7f1e7;border-color:#e8dfd1;color:#27231e}.pickerBackdrop{background:#322b2566}.pickerItem{color:#27231e}.pickerItem:hover{border-color:#9c7bc8;background:#eee4fc}
+.staffBar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:12px}.staffBrand{font-size:21px;font-weight:850}.staffBrand small{display:block;font-size:12px;color:#706a62;font-weight:600;margin-top:3px}.staffBar .adminBtn{padding:9px 12px}
+.login{height:auto;min-height:100vh;padding:24px}.login h2{margin:0;font-size:28px}.login p{color:#706a62;margin:0 0 10px}.login input,.loginBtn{width:min(340px,100%)}
+.workGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}.workGrid .adminPanel{padding:22px}.buttonRow{display:flex;gap:8px;flex-wrap:wrap}.checkLine{display:flex;align-items:center;gap:10px;font-size:14px;line-height:1.4}.checkLine input{width:20px;height:20px;padding:0;min-height:0;flex:none}
+.feedback{padding:12px 14px;border-radius:12px;background:#eef7ee;color:#335b36;font-size:14px;line-height:1.5;margin-top:12px;overflow-wrap:anywhere}.feedback.problem{background:#fff1e8;color:#8a4f24}.statusNote{padding:12px;background:#f5f1eb;border-radius:12px;font-size:13px;color:#706a62;line-height:1.5}
+.noticeItem{padding:16px;border:1px solid #e8dfd1;border-radius:14px;background:#fffaf2;margin-bottom:12px}.noticeItem p{white-space:pre-wrap;font-size:14px;line-height:1.5;overflow-wrap:anywhere}.noticeItem .buttonRow{margin-top:12px}.noticeState{font-size:12px;color:#706a62;margin-top:8px}
+.themePreview{position:relative;isolation:isolate;overflow:hidden;min-height:260px;border-radius:20px;padding:26px;display:flex;flex-direction:column;gap:14px;border:1px solid #e8dfd1;background:#fff8ef;color:#27231e}.themePreview .previewPhoto{position:absolute;inset:-32px;background-size:cover;background-position:center;z-index:-1;pointer-events:none}.themePreview:before{content:'';position:absolute;inset:0;background:#ffffffb8;z-index:-1}.themePreview strong{font-size:25px}.previewCard{background:#ffffffed;border-radius:14px;padding:18px}.colorRow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}input[type=color]{width:100%;height:46px;padding:4px}
+.formSummary{background:#fff7db;border:1px solid #f0db9f;border-radius:12px;padding:12px;font-size:13px;line-height:1.5}
+@media(max-width:800px){.workGrid{grid-template-columns:1fr}.header{padding:16px}.container{padding:16px}.tab{min-height:44px;min-width:0;flex:1 1 130px;font-size:13px;flex-direction:row}.formRow2{grid-template-columns:1fr 1fr}.colorRow{grid-template-columns:1fr}.userRow{grid-template-columns:1fr auto}.pointButtons{grid-column:1/-1}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+
+
+.workGrid>*,.formRow2>*,.adminInput,.adminTextarea,.adminSelect{min-width:0}.formRow2{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:600px){.workGrid{grid-template-columns:minmax(0,1fr)}.formRow2{grid-template-columns:minmax(0,1fr)}}
+
+.mediaGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}.mediaTile{background:white;border:1px solid #e8dccb;border-radius:20px;overflow:hidden}.mediaTile img{width:100%;height:150px;object-fit:contain;background:#f8f3ec}.mediaTile .mediaInfo{padding:12px;overflow-wrap:anywhere}.mediaTile small{display:block;margin-bottom:12px}.noticeMediaPreview{width:100%;max-height:220px;object-fit:cover;border-radius:18px}.pushPreview{padding:16px;border:1px solid #e8dccb;border-radius:18px;background:#fffaf3}.pushPreview strong,.pushPreview small{display:block}.pushPreview p{white-space:pre-wrap}.pushOptions{display:grid;gap:12px;padding:14px;background:#fff8ef;border-radius:18px}
+
+/* Kiosk staff: sfondo nero, gestione raccolta e riepiloghi compatti. */
+:root{color-scheme:dark;--bg:#000;--bg-2:#0c0c0e;--panel:#141416;--panel-2:#1c1c20;--k-bg:#000;--k-panel:#141416;--k-panel-2:#1c1c20;--line:#303036;--k-line:#303036;--line-strong:#454550;--text-soft:#b7b7c2;--k-text-soft:#b7b7c2;--accent:#bca0ed}
+html,body{background:#000;color:#f3f3f6}
+.header{background:#0c0c0e;border-color:#303036;backdrop-filter:none}
+.card,.adminPanel,.promoMobileCard,.flavorMobileCard,.activityDayCard,.pickerModal{background:#141416;color:#f3f3f6;border-color:#303036;box-shadow:none}
+.adminItem,.promoListCard,.userRow,.activityCountBox,.chartWrap,.statBadge,.dayBox,.noticeItem{background:#1c1c20;color:#f3f3f6;border-color:#303036}
+.adminHint,.fieldLabel,.adminItemMeta,.promoMobileSub,.flavorMobileSub,.pickerSub,.pickerName,.pickerPreviewText,.activityEmptyNote,.activityLabel,.time,.small,.usageLead,.flavorDaySub,.staffBrand small,.login p,.noticeState{color:#b7b7c2}
+.tab{background:#1c1c20;color:#e6e6ed;border-color:#35353d}
+.tab.active{background:#332545;color:#eadcff;border-color:#9473c1}
+.countpill{background:#0c0c0e;color:#eadcff}
+.badge,.promoBadgeMini,.promoDayBadge,.flavorDayBadge,.activityTotal,.userPoints{background:#2b2138;color:#ddc9fa;border-color:#58406f}
+.waiting{border-color:#d1a348}.card.selected{outline-color:#bca0ed}
+.adminInput,.adminTextarea,.adminSelect,.searchInput,.inlineEdit input,.login input{background:#0c0c0e;color:#f3f3f6;border-color:#454550}
+input::placeholder,textarea::placeholder{color:#9797a5;opacity:1}
+input:focus,select:focus,textarea:focus{outline-color:#a889db}
+.adminInput:focus,.adminTextarea:focus,.adminSelect:focus{border-color:#a889db}
+.adminBtn,.loginBtn{background:#ffde83;color:#30200a}
+.adminBtn.secondary,.refreshBtn{background:#2b2138;color:#ddc9fa;border-color:#58406f}
+.adminBtn.danger,.cancel,.pointBtn.minus{background:#3e1d20;color:#ffb3ad;border-color:#80413e}
+.approve,.pointBtn.plus{background:#163c26;color:#a7edbf;border-color:#3f8055}
+.adminEmpty,.emptyBox,.kbdHint,.statusNote{background:#17171b;color:#b7b7c2;border-color:#35353d}
+.toast{background:#1c1c20;color:#f3f3f6;border-color:#454550;box-shadow:0 6px 24px #0008}
+.activityCountBox.ok b,.miniPill.ok{color:#86efac}.activityCountBox.bad b,.miniPill.bad{color:#fca5a5}
+.promoListThumb,.adminThumb,.promoImagePreview,.flavorImagePreview,.pickerItem{background:#212125;color:#f3f3f6;border-color:#35353d}
+.pickerBackdrop{background:#000b}.pickerItem:hover{background:#332545;border-color:#a889db}
+.feedback{background:#163c26;color:#a7edbf}.feedback.problem{background:#402819;color:#ffd3aa}
+.formSummary{background:#352b17;color:#f5deb0;border-color:#6f592b}
+.mediaTile,.pushPreview{background:#1c1c20;color:#f3f3f6;border-color:#35353d}
+.mediaTile img,.pushOptions{background:#141416}
+.tabs{align-items:stretch}
+.managementMenu{display:flex;align-items:center;gap:10px;min-width:0;padding:0 12px;border:1px solid #35353d;border-radius:12px;background:#1c1c20;color:#e6e6ed}
+.managementMenu>span{font-size:14px;font-weight:700}
+.managementMenu select{width:auto;min-width:0;max-width:230px;min-height:46px;padding:8px 24px 8px 4px;border:0;border-radius:8px;background:#1c1c20;color:#e6e6ed;font:inherit;font-size:14px;cursor:pointer}
+.managementMenu.active{background:#332545;border-color:#9473c1;color:#eadcff}
+.managementMenu.active select{background:#332545;color:#eadcff}
+#activityCard{padding-top:0}
+#activityCard .chartShell{padding:14px;margin-bottom:12px;border-radius:14px}
+#activityCard .promo{font-size:18px}
+#activityCard .usageLead{font-size:12px;margin-bottom:10px}
+.activityGridPro{grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:10px}
+.activityDayCard{padding:10px;border-radius:12px;min-width:0}
+.activityTop{align-items:center;gap:4px;margin-bottom:8px}
+.activityDate{font-size:16px;letter-spacing:0}
+.activityLabel{display:none}
+.activityTotal{font-size:10px;padding:3px 5px}
+.activityCounts{gap:5px}
+.activityCountBox{padding:7px 4px;border-radius:8px;min-width:0;text-align:center}
+.activityCountBox b{font-size:20px;line-height:1.1}
+.activityCountBox span{font-size:10px;margin-top:3px}
+.activityBar{height:5px;margin-top:8px}
+.activityEmptyNote{font-size:10px;margin-top:6px}
+@media(max-width:1100px){.activityGridPro{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:600px){.tabs>.tab{flex:1 1 0}.managementMenu{width:100%}.managementMenu select{flex:1;max-width:none}.activityGridPro{grid-template-columns:repeat(2,minmax(0,1fr))}.activityDayCard{padding:9px}.activityDate{font-size:16px}.activityCountBox b{font-size:20px}}
+.missionStaffGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.missionStaffGrid .adminPanel{display:grid;align-content:start;gap:12px;min-width:0}.missionStaffRequirement{display:grid;grid-template-columns:minmax(0,1fr) 76px;gap:10px}.missionStaffLink{display:grid;grid-template-columns:minmax(0,1fr) minmax(160px,1fr) auto;gap:10px;align-items:center;margin-top:12px}.missionStaffGrid label{display:block}.missionStaffGrid textarea{min-height:100px}.missionStaffGrid .adminHint{font-size:12px}.missionStaffGrid .adminPanelTitle{font-size:19px}@media(max-width:1050px){.missionStaffGrid{grid-template-columns:1fr}.missionStaffLink{grid-template-columns:1fr}.missionStaffLink .adminBtn{justify-self:start}}
+
+
+.promoMissionBox{margin-top:14px;padding:16px;border:1px solid #564467;border-radius:18px;background:#241c2b}.promoMissionBox .checkLine{font-weight:700;margin:0 0 10px}.promoMissionFields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.promoMissionFields[hidden]{display:none}.promoMissionBox .adminHint{font-size:12px;margin:10px 0;line-height:1.6}.missionSummaryRow{display:grid;grid-template-columns:minmax(0,1fr) 80px auto;gap:10px;align-items:center;padding:12px 0;border-top:1px solid #453d4b}.missionSummaryRow b{font-size:14px;overflow-wrap:anywhere}.missionLinksBadges{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.missionLinksBadges span{background:#3c2c4f;border:1px solid #67517d;border-radius:12px;padding:6px 9px;font-size:12px;color:#e5d4f8}@media(max-width:650px){.promoMissionFields{grid-template-columns:1fr}.missionSummaryRow{grid-template-columns:minmax(0,1fr) 80px}.missionSummaryRow .adminBtn{grid-column:1/-1;justify-self:start}}
+
+.promoListCard>.promoMissionBox{grid-column:1/-1;margin-top:0}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+<div id="toast" class="toast"></div>
+
+<script>
+let sb = null;
+try{
+  if(!window.supabase || !window.supabase.createClient){
+    throw new Error("Libreria Supabase non caricata. Controlla la connessione internet o apri il file da GitHub Pages.");
+  }
+
+  sb = window.supabase.createClient(
+    "https://cbgwfngseoppybsbbwwo.supabase.co",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNiZ3dmbmdzZW9wcHlic2Jid3dvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4NTk4NDYsImV4cCI6MjA3NTQzNTg0Nn0.5U_4SNDZ18YA7PHY7dH3vZItGp-_XzeQxS1IMAuBQEs",
+    {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage: window.localStorage,
+        storageKey: "gelatoclub_kiosk_auth_v1"
+      }
+    }
+  );
+}catch(e){
+  console.error(e);
+  window.__kioskBootError = e?.message || String(e);
+}
+
+// Remote content shared with Gelato Club. Publishing never stores private push keys here.
+const CONFIG_PUBLIC = 'https://cbgwfngseoppybsbbwwo.supabase.co/storage/v1/object/public/config/';
+let staffVerified = false;
+let noticeItems = [], promoPresets = [], themeConfig = null;
+let flavorPresets = [], flavorPresetError = '';
+const PROMO_BADGES = [['piu_richiesta','Più richiesta'],['novita','Novità'],['piu_conveniente','Più conveniente'],['solo_oggi','Solo oggi'],['da_non_perdere','Da non perdere'],['edizione_limitata','Edizione limitata'],['da_condividere','Da condividere'],['consigliata_milo','Consigliata da Milo']];
+let experienceBusy = false, experienceLoadError = '', editingNoticeId = '';
+let pushStatus = { configured:false, message:'Verifica notifiche in corso…' };
+let actionFeedback = '';
+let pushJobs = [];
+try { pushJobs = JSON.parse(localStorage.getItem('kiosk_push_jobs_v1') || '[]'); if(!Array.isArray(pushJobs)) pushJobs=[]; } catch {}
+function rememberPushJobs(){ localStorage.setItem('kiosk_push_jobs_v1',JSON.stringify(pushJobs.slice(-40))); }
+async function readConfigFile(name, fallback){
+  const response=await fetch(CONFIG_PUBLIC + name + '?t=' + Date.now(),{cache:'no-store'});
+  if(response.status===404) return fallback;
+  if(!response.ok){const missing=await response.clone().json().catch(()=>({}));if(String(missing.statusCode)==='404'||missing.error==='not_found')return fallback;}
+  if(!response.ok) throw new Error('Impossibile caricare le impostazioni ('+response.status+'). Riprova prima di salvare.');
+  return response.json();
+}
+async function writeConfigFile(name,payload){
+  if(!staffVerified) throw new Error('Accedi con un account staff.');
+  const {error}=await sb.storage.from('config').upload(name,new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),{contentType:'application/json',upsert:true,cacheControl:'0'});
+  if(error) throw new Error('Salvataggio non riuscito: '+error.message);
+}
+async function loadExperience(){
+  experienceLoadError='';
+  try {
+    const [notices,presets,theme]=await Promise.all([
+      readConfigFile('app-notices.json',{version:1,notices:[]}),
+      readConfigFile('promo-presets.json',{version:1,presets:[]}),
+      readConfigFile('app-appearance.json',{version:1,enabled:false})
+    ]);
+    if(notices.version!==1 || !Array.isArray(notices.notices) || presets.version!==1 || !Array.isArray(presets.presets) || theme.version!==1) throw new Error('Formato delle impostazioni non riconosciuto. Nessuna modifica salvata.');
+    noticeItems=notices.notices; promoPresets=presets.presets; themeConfig=theme;
+  } catch(e){ experienceLoadError=e.message; }
+  try {
+    const {data,error}=await sb.functions.invoke('club-push',{body:{action:'status'}});
+    if(error || !data?.configured) pushStatus={configured:false,message:'Notifiche da configurare. Puoi già pubblicare contenuti e riprovare l’invio dopo la configurazione.'};
+    else pushStatus={configured:true,message:'Servizio configurato per '+[data.platforms?.android?'Android':'',data.platforms?.ios?'iPhone':''].filter(Boolean).join(' e ')+'. I telefoni devono avere la nuova app e il permesso alle notifiche.'};
+  }catch{pushStatus={configured:false,message:'Servizio notifiche non raggiungibile. I contenuti dell’app funzionano separatamente.'};}
+}
+function feedbackMarkup(){return actionFeedback ? `<div class="feedback ${pushJobs.some(j=>j.state!=='accepted')?'problem':''}" role="status">${escapeHtml(actionFeedback)}</div>`:'';}
+function pendingPushMarkup(){
+  const accepted=pushJobs.filter(j=>j.state==='accepted').slice(-5).reverse();
+  const history=accepted.length?`<div class="adminPanel" style="margin-top:16px"><div class="adminPanelTitle">Invii recenti su questo dispositivo</div>${accepted.map(j=>`<div class="noticeItem"><b>${escapeHtml(j.title)}</b><p>${j.scheduledAt?'Programmata: '+escapeHtml(new Date(j.scheduledAt).toLocaleString('it-IT',{timeZone:'Europe/Rome'}))+' · ':''}${escapeHtml(j.report||'Notifica in coda. La pubblicazione non certifica la consegna ai telefoni.')}</p><button class="adminBtn secondary" onclick="checkPushReport(${pushJobs.indexOf(j)})">Verifica invio</button>${j.scheduledAt?`<button class="adminBtn danger" onclick="cancelPush(${pushJobs.indexOf(j)})">Annulla invio programmato</button>`:''}</div>`).join('')}</div>`:'';
+  const list=pushJobs.filter(j=>j.state!=='accepted');
+  return history + (list.length ? `<div class="adminPanel" style="margin-top:16px"><div class="adminPanelTitle">Notifiche da completare</div><p class="adminHint">Il contenuto è già pubblicato. Riprova solo l’invio, senza pubblicarlo di nuovo.</p>${list.map((j,i)=>`<div class="noticeItem"><b>${escapeHtml(j.title)}</b><p>${escapeHtml(j.error||'Invio ancora da completare.')}</p><div class="buttonRow"><button class="adminBtn secondary" ${experienceBusy?'disabled':''} onclick="retryPush(${pushJobs.indexOf(j)})">Riprova invio</button><button class="adminBtn danger" onclick="discardPush(${pushJobs.indexOf(j)})">Ignora invio</button></div></div>`).join('')}</div>`:'');
+}
+async function checkPushReport(index){
+  const job=pushJobs[index];if(!job?.jobId)return;
+  const {data,error}=await sb.functions.invoke('club-push',{body:{action:'report',jobId:job.jobId}});
+  if(error){showToast('Verifica non disponibile.','bad');return;}
+  const c=data.counts||{};job.report=`Prese in carico da Android/Apple: ${c.accepted||0} · In coda: ${(c.pending||0)+(c.sending||0)} · Errori: ${c.failed||0} · Scadute: ${c.expired||0}.`;rememberPushJobs();renderAll(true);
+}
+async function requestContentPush(kind,item,options={}){
+  const existing=pushJobs.find(j=>j.kind===kind && j.itemId===item.id && j.revision===(item.updatedAt||String(item.createdAt)));
+  const job=existing || {kind,itemId:item.id,revision:item.updatedAt||String(item.createdAt),title:item.title,key:crypto.randomUUID(),state:'pending',scheduledAt:options?.scheduledAt,message:options?.message};
+  if(!existing) pushJobs.push(job);
+  rememberPushJobs();
+  return deliverPush(job);
+}
+async function deliverPush(job){
+  try {
+    const {data,error}=await sb.functions.invoke('club-push',{body:{action:'send',kind:job.kind,itemId:job.itemId,revision:job.revision,idempotencyKey:job.key,scheduledAt:job.scheduledAt,message:job.message}});
+    if(error || !data?.ok || !data.notificationId){
+      let detail=data?.error;
+      if(!detail && error?.context?.json) {try{detail=(await error.context.json()).error;}catch{}}
+      throw new Error(detail||'Invio non confermato dal servizio. Riprova dopo aver controllato la configurazione.');
+    }
+    job.state='accepted';job.jobId=data.notificationId;job.error='';rememberPushJobs();
+    return (job.scheduledAt?'Invio programmato per '+new Date(job.scheduledAt).toLocaleString('it-IT',{timeZone:'Europe/Rome'})+'. ':'')+'Notifica in coda per '+data.recipients+' telefoni. Usa Verifica invio per vedere gli esiti; la consegna dipende dai permessi dei telefoni.';
+  }catch(e){job.error=e.message;rememberPushJobs();return 'Contenuto pubblicato; notifica non confermata: '+e.message;}
+}
+async function retryPush(index){
+  if(experienceBusy || !pushJobs[index]) return;
+  experienceBusy=true;
+  actionFeedback=await deliverPush(pushJobs[index]);
+  experienceBusy=false;renderAll(true);
+}
+function discardPush(index){pushJobs.splice(index,1);rememberPushJobs();renderAll(true);}
+function localDateValue(iso){if(!iso)return '';const d=new Date(iso);if(!Number.isFinite(d.getTime()))return '';const p=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(d),v=k=>p.find(x=>x.type===k)?.value;return `${v('year')}-${v('month')}-${v('day')}T${v('hour')}:${v('minute')}`;}
+function isoInput(id){const raw=readVal(id);return raw?romeDateTime(raw):undefined;}
+function validateWindow(startsAt,endsAt){if(!endsAt || Date.parse(endsAt)<=Date.now())throw new Error('Scegli una scadenza futura.');if(startsAt && Date.parse(startsAt)>=Date.parse(endsAt))throw new Error('La fine deve essere dopo l’inizio.');}
+function noticeStatus(n){const now=Date.now();return Date.parse(n.endsAt)<=now?'Scaduto':n.startsAt && Date.parse(n.startsAt)>now?'Programmato':'Attivo';}
+function renderNotices(){
+  const selected=noticeItems.find(n=>n.id===editingNoticeId);
+  const end=selected?.endsAt || new Date(Date.now()+86400000).toISOString();
+  return `<div class="container">${experienceLoadError?`<div class="feedback problem">${escapeHtml(experienceLoadError)} <button class="adminBtn secondary" onclick="setTab('notices')">Ricarica</button></div>`:''}<div class="workGrid">
+    <div class="adminPanel"><div class="adminPanelTitle">${selected?'Modifica avviso':'Nuovo avviso'}</div><p class="adminHint">Compare all’apertura dell’app e prima delle promozioni in Home, fino alla scadenza.</p><div class="formGrid">
+      <label><span class="fieldLabel">Titolo</span><input class="adminInput" id="noticeTitle" maxlength="120" placeholder="Es. Orario di oggi" value="${escapeHtml(selected?.title||'')}"></label>
+      <label><span class="fieldLabel">Messaggio</span><textarea class="adminTextarea" id="noticeText" maxlength="1500" placeholder="Scrivi cosa devono sapere i clienti">${escapeHtml(selected?.text||'')}</textarea></label>
+      <div class="formRow2"><label><span class="fieldLabel">Da (vuoto = subito)</span><input class="adminInput" id="noticeStart" type="datetime-local" value="${localDateValue(selected?.startsAt)}"></label><label><span class="fieldLabel">Fino a</span><input class="adminInput" id="noticeEnd" type="datetime-local" value="${localDateValue(end)}"></label></div>
+      <label><span class="fieldLabel">Immagine dell’avviso</span><div id="noticeImage_preview">${selected?.imageUrl?`<img class="noticeMediaPreview" src="${escapeHtml(selected.imageUrl)}" alt="Anteprima avviso">`:''}</div><input type="hidden" id="noticeImage" value="${escapeHtml(selected?.imageUrl||'')}"></label><div class="buttonRow"><button class="adminBtn secondary" onclick="openIconPicker('noticeImage')">Scegli immagine</button><button class="adminBtn secondary" onclick="document.getElementById('noticeImage').value='';document.getElementById('noticeImage_preview').innerHTML=''">Rimuovi immagine</button></div><p class="adminHint">Carica nuove foto nella pagina Immagini. Questa foto compare nella Home e nel pop-up dell’app.</p>
+      ${pushOptionsMarkup('notice')}
+      <label class="checkLine"><input type="checkbox" id="noticePush">Invia anche una notifica ai telefoni</label><div class="statusNote">${escapeHtml(pushStatus.message)} Gli invii programmati richiedono il nuovo servizio notifiche.</div>
+      <div class="buttonRow"><button class="adminBtn" ${experienceBusy||experienceLoadError?'disabled':''} onclick="saveNotice()">${selected?'Salva modifica':'Pubblica avviso'}</button>${selected?'<button class="adminBtn secondary" onclick="editingNoticeId=\'\';renderAll(true)">Annulla modifica</button>':''}</div></div>${feedbackMarkup()}</div>
+    <div class="adminPanel"><div class="adminPanelTitle">Avvisi pubblicati</div><p class="adminHint">Disattivare un avviso lo rimuove dall’app al prossimo aggiornamento dei contenuti.</p>${noticeItems.map((n,i)=>`<div class="noticeItem"><b>${escapeHtml(n.title)}</b><div class="noticeState">${noticeStatus(n)} · Fino al ${escapeHtml(new Date(n.endsAt).toLocaleString('it-IT'))}</div><p>${escapeHtml(n.text)}</p><div class="buttonRow"><button class="adminBtn secondary" onclick="editNotice(${i})">Modifica</button><button class="adminBtn danger" ${experienceBusy?'disabled':''} onclick="removeNotice(${i})">Disattiva</button></div></div>`).join('')||'<div class="adminEmpty">Nessun avviso. Le promozioni continuano normalmente.</div>'}</div></div>${pendingPushMarkup()}</div>`;
+}
+function editNotice(index){editingNoticeId=noticeItems[index]?.id||'';renderAll(true);}
+async function saveNotice(){
+  if(experienceBusy || experienceLoadError)return;
+  try{
+    const title=readVal('noticeTitle'),text=readVal('noticeText'),startsAt=isoInput('noticeStart'),endsAt=isoInput('noticeEnd');
+    if(!title||!text)throw new Error('Inserisci titolo e messaggio.');validateWindow(startsAt,endsAt);
+    const push=document.getElementById('noticePush').checked;
+    const pushOptions=push?readPushOptions('notice',startsAt,endsAt):null;
+    experienceBusy=true;
+    const latest=await readConfigFile('app-notices.json',{version:1,notices:[]});
+    if(latest.version!==1||!Array.isArray(latest.notices))throw new Error('Formato avvisi non valido.');
+    const next={id:editingNoticeId||makeId('notice'),title,text,startsAt,endsAt,updatedAt:new Date().toISOString(),imageUrl:readVal('noticeImage')||undefined};
+    const items=[next,...latest.notices.filter(n=>n.id!==next.id)];if(items.length>20)throw new Error('Hai già 20 avvisi. Disattivane uno prima di aggiungerne un altro.');
+    await writeConfigFile('app-notices.json',{version:1,notices:items});noticeItems=items;editingNoticeId='';
+    actionFeedback=push?await requestContentPush('notice',next,pushOptions):'Avviso pubblicato. Compare nell’app entro circa un minuto, oppure riaprendola.';
+    showToast('Avviso pubblicato','ok');experienceBusy=false;renderAll(true);
+  }catch(e){showToast(e.message,'bad');}finally{experienceBusy=false;}
+}
+async function removeNotice(index){
+  const item=noticeItems[index];if(!item||experienceBusy||!confirm('Disattivare questo avviso nell’app?'))return;
+  experienceBusy=true;
+  try{const latest=await readConfigFile('app-notices.json',{version:1,notices:[]});if(!Array.isArray(latest.notices))throw new Error('Formato avvisi non valido.');const items=latest.notices.filter(n=>n.id!==item.id);await writeConfigFile('app-notices.json',{version:1,notices:items});noticeItems=items;editingNoticeId='';pushJobs=pushJobs.filter(j=>j.itemId!==item.id||j.state==='accepted');rememberPushJobs();actionFeedback='Avviso disattivato. Una notifica già inviata non viene richiamata.';experienceBusy=false;renderAll(true);}catch(e){showToast(e.message,'bad');}finally{experienceBusy=false;}
+}
+const THEME_PRESETS=[
+  {name:'Classico Altromare',backgroundColor:'#fff8ef',backgroundColor2:'#fff8ef',accentColor:'#fbbf24'},
+  {name:'Lucca Comics',backgroundColor:'#ede3ff',backgroundColor2:'#ffedd6',accentColor:'#a77ae0'},
+  {name:'Estate',backgroundColor:'#e2f5ff',backgroundColor2:'#fff1bc',accentColor:'#ffbc66'},
+  {name:'Autunno',backgroundColor:'#ffeddc',backgroundColor2:'#f4e5ef',accentColor:'#d59a48'},
+  {name:'Feste',backgroundColor:'#e8f3e7',backgroundColor2:'#ffedeb',accentColor:'#d7786e'}
+];
+function renderAppearance(){
+  const t=themeConfig?.enabled!==false && themeConfig?.endsAt?themeConfig:THEME_PRESETS[0];
+  return `<div class="container"><div class="workGrid"><div class="adminPanel"><div class="adminPanelTitle">Aspetto dell’app</div><p class="adminHint">Colori e sfondo per Home e Profilo. Milo, foto delle promozioni e testi restano ben leggibili.</p>${experienceLoadError?`<div class="feedback problem">${escapeHtml(experienceLoadError)}</div>`:''}<div class="formGrid">
+    <label><span class="fieldLabel">Parti da un tema</span><select class="adminSelect" onchange="applyThemePreset(this.value)"><option value="">Personalizzato / scegli…</option>${THEME_PRESETS.map((p,i)=>`<option value="${i}">${p.name}</option>`).join('')}</select></label>
+    <label><span class="fieldLabel">Nome evento</span><input class="adminInput" id="themeName" maxlength="80" value="${escapeHtml(t.name||'')}" oninput="previewTheme()"></label>
+    <div class="colorRow"><label><span class="fieldLabel">Colore iniziale</span><input id="themeColor" type="color" value="${safeHex(t.backgroundColor,'#fff8ef')}" oninput="previewTheme()"></label><label><span class="fieldLabel">Colore finale</span><input id="themeColor2" type="color" value="${safeHex(t.backgroundColor2||t.backgroundColor,'#fff8ef')}" oninput="previewTheme()"></label><label><span class="fieldLabel">Accento</span><input id="themeAccent" type="color" value="${safeHex(t.accentColor,'#fbbf24')}" oninput="previewTheme()"></label></div>
+    <label><span class="fieldLabel">Direzione sfumatura</span><input class="adminInput" id="themeAngle" type="range" min="0" max="360" value="${Number(t.gradientAngle)||135}" oninput="previewTheme()"></label>
+    <label><span class="fieldLabel">Frase evento (facoltativa)</span><input class="adminInput" id="themeBanner" maxlength="240" value="${escapeHtml(t.banner||'')}" oninput="previewTheme()"></label>
+    <label><span class="fieldLabel">Sfondo</span><input type="file" class="adminInput" accept="image/png,image/jpeg,image/webp" onchange="uploadThemeImage(this)"></label>
+    <input type="hidden" id="themeImage" value="${escapeHtml(t.backgroundImage||'')}"><div class="buttonRow"><button class="adminBtn secondary" onclick="openIconPicker('themeImage')">Scegli immagine già caricata</button><button class="adminBtn danger" onclick="document.getElementById('themeImage').value='';previewTheme()">Rimuovi sfondo</button></div>
+    <div class="formRow2"><label><span class="fieldLabel">Sfocatura (0–32)</span><input class="adminInput" id="themeBlur" type="range" min="0" max="32" value="${Number(t.blur??14)}" oninput="previewTheme()"></label><label><span class="fieldLabel">Intensità immagine (0–30%)</span><input class="adminInput" id="themeOpacity" type="range" min="0" max="30" value="${Math.round(Number(t.imageOpacity??.16)*100)}" oninput="previewTheme()"></label></div>
+    <div class="formRow2"><label><span class="fieldLabel">Da (vuoto = subito)</span><input class="adminInput" id="themeStart" type="datetime-local" value="${localDateValue(t.startsAt)}"></label><label><span class="fieldLabel">Fino a</span><input class="adminInput" id="themeEnd" type="datetime-local" value="${localDateValue(t.endsAt||new Date(Date.now()+7*86400000).toISOString())}"></label></div>
+    <div class="buttonRow"><button class="adminBtn" ${experienceBusy||experienceLoadError?'disabled':''} onclick="saveAppearance()">Pubblica tema</button><button class="adminBtn secondary" ${experienceBusy?'disabled':''} onclick="resetAppearance()">Torna al tema normale</button></div>${feedbackMarkup()}</div></div>
+    <div class="adminPanel"><div class="adminPanelTitle">Anteprima dei colori</div><p class="adminHint">Il layout dell’app resta quello approvato. Questa anteprima mostra lo sfondo e l’accento.</p><div class="themePreview" id="themePreview"><div class="previewPhoto" id="themePreviewPhoto"></div><small>GELATO CLUB</small><strong>Ciao, Raffaele!</strong><div id="themePreviewBanner"></div><div class="previewCard">La tua tessera · <b>1 punto</b><br><small>Scopri i tuoi premi →</small></div><div class="previewCard">Le promo del momento</div><div id="themePreviewAccent" class="previewCard">Un gelato, una sorpresa.</div></div></div></div></div>`;
+}
+function safeHex(value,fallback){return /^#[0-9a-f]{6}$/i.test(String(value))?value:fallback;}
+function themeDraft(){return {version:1,name:readVal('themeName'),backgroundColor:readVal('themeColor'),backgroundColor2:readVal('themeColor2'),accentColor:readVal('themeAccent'),gradientAngle:readNum('themeAngle',135),banner:readVal('themeBanner'),backgroundImage:readVal('themeImage')||undefined,blur:readNum('themeBlur',14),imageOpacity:readNum('themeOpacity',16)/100};}
+function previewTheme(){const t=themeDraft(),el=document.getElementById('themePreview');if(!el)return;el.style.background=`linear-gradient(${t.gradientAngle}deg,${t.backgroundColor},${t.backgroundColor2})`;const photo=document.getElementById('themePreviewPhoto');photo.style.backgroundImage=t.backgroundImage?`url(${JSON.stringify(t.backgroundImage)})`:'';photo.style.filter=`blur(${t.blur}px)`;photo.style.opacity=t.imageOpacity;document.getElementById('themePreviewBanner').textContent=t.banner;document.getElementById('themePreviewAccent').style.borderBottom=`4px solid ${t.accentColor}`;}
+function applyThemePreset(index){const p=THEME_PRESETS[Number(index)];if(index===''||!p)return;for(const [id,key]of [['themeName','name'],['themeColor','backgroundColor'],['themeColor2','backgroundColor2'],['themeAccent','accentColor']])document.getElementById(id).value=p[key];previewTheme();}
+async function uploadThemeImage(input){
+  const file=input.files?.[0];if(!file||experienceBusy)return;
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024){showToast('Scegli JPG, PNG o WebP fino a 5 MB.','bad');input.value='';return;}
+  experienceBusy=true;
+  try{if(!staffVerified)throw new Error('Accedi come staff.');const ext={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[file.type];const path='app-theme-'+crypto.randomUUID()+'.'+ext;const{error}=await sb.storage.from('icons').upload(path,file,{contentType:file.type,cacheControl:'3600',upsert:false});if(error)throw error;document.getElementById('themeImage').value=publicIconUrl(path);previewTheme();showToast('Immagine caricata. Premi Pubblica tema per applicarla.','ok');}catch(e){showToast('Caricamento non riuscito: '+e.message,'bad');}finally{experienceBusy=false;}
+}
+async function saveAppearance(){if(experienceBusy||experienceLoadError)return;try{const t={...themeDraft(),startsAt:isoInput('themeStart'),endsAt:isoInput('themeEnd')};validateWindow(t.startsAt,t.endsAt);experienceBusy=true;await writeConfigFile('app-appearance.json',t);themeConfig=t;actionFeedback='Tema pubblicato. Home e Profilo lo ricevono entro circa un minuto; alla scadenza torna il tema normale.';showToast('Tema pubblicato','ok');experienceBusy=false;renderAll(true);}catch(e){showToast(e.message,'bad');}finally{experienceBusy=false;}}
+async function resetAppearance(){if(experienceBusy||!confirm('Ripristinare i colori normali dell’app?'))return;experienceBusy=true;try{await writeConfigFile('app-appearance.json',{version:1,enabled:false});themeConfig={version:1,enabled:false};actionFeedback='Tema normale ripristinato.';experienceBusy=false;renderAll(true);}catch(e){showToast(e.message,'bad');}finally{experienceBusy=false;}}
+function presetOptions(){return `<option value="">Nuova promozione / campi vuoti</option>${promoPresets.length?`<optgroup label="Modelli salvati">${promoPresets.map((p,i)=>`<option value="saved:${i}">${escapeHtml(p.title)}</option>`).join('')}</optgroup>`:''}${promotions.length?`<optgroup label="Riprendi una promozione esistente">${promotions.map((p,i)=>`<option value="live:${i}">${escapeHtml(p.title)}</option>`).join('')}</optgroup>`:''}`;}
+function fillPromoPreset(value){
+  const [source,index]=value.split(':'),p=source==='saved'?promoPresets[Number(index)]:source==='live'?promotions[Number(index)]:null;
+  const data=p||{};for(const[id,key,fallback]of [['admPromoTitle','title',''],['admPromoDesc','desc',data.description||''],['admPromoPoints','points',1],['admPromoDays','durationDays',3],['admPromoBadge','badge',''],['admPromoPrice','priceLabel',''],['admPromoSavings','savingsEuro',Number(data.savingsCents||0)/100]])document.getElementById(id).value=data[key]??fallback;
+  document.getElementById('admPromoImage').value=getPromoImageUrl(data);updateImagePreview('admPromoImage',getPromoImageUrl(data));
+  // Dates are intentionally chosen for each activation; do not reuse expired periods.
+}
+async function savePromoPreset(){
+  if(managerBusy||experienceLoadError)return;
+  const title=readVal('admPromoTitle'),desc=readVal('admPromoDesc'),imageUrl=readVal('admPromoImage');
+  if(!title||!desc||!imageUrl){showToast('Completa titolo, descrizione e immagine prima di salvare il modello.','bad');return;}
+  const selected=readVal('admPromoPreset'),parts=selected.split(':');const existing=parts[0]==='saved'?promoPresets[Number(parts[1])]:null;
+  let savingsCents;try{savingsCents=readSavingsCents();}catch(e){showToast(e.message,'bad');return;}
+  const next={id:existing?.id||makeId('preset'),title,desc,iconUrl:imageUrl,points:Math.max(0,Math.min(5,readNum('admPromoPoints',1))),durationDays:Math.max(1,readNum('admPromoDays',3)),badge:readVal('admPromoBadge'),priceLabel:readVal('admPromoPrice'),savingsCents};
+  managerBusy=true;
+  try{const latest=await readConfigFile('promo-presets.json',{version:1,presets:[]});if(latest.version!==1||!Array.isArray(latest.presets))throw new Error('Formato modelli non valido.');const list=[next,...latest.presets.filter(p=>p.id!==next.id)];await writeConfigFile('promo-presets.json',{version:1,presets:list});promoPresets=list;const select=document.getElementById('admPromoPreset');select.innerHTML=presetOptions();select.value='saved:0';showToast('Modello salvato. Non è stato pubblicato nell’app.','ok');}catch(e){showToast(e.message,'bad');}finally{managerBusy=false;}
+}
+
+function readSavingsCents(){
+ const raw=readVal('admPromoSavings').replace(',','.');if(!raw)return 0;
+ if(!/^\d{1,4}(\.\d{1,2})?$/.test(raw))throw new Error('Risparmio: inserisci euro e al massimo due decimali.');
+ const [euros,cents='']=raw.split('.'),value=Number(euros)*100+Number(cents.padEnd(2,'0'));
+ if(value>100000)throw new Error('Il risparmio massimo è 1.000 €.');return value;
+}
+function romeDateTime(raw){
+ if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(raw))throw new Error('Scegli data e ora dell’invio.');
+ const target=Date.parse(raw+':00Z');let stamp=target;
+ const format=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+ for(let i=0;i<3;i++){const p=format.formatToParts(stamp),v=k=>p.find(x=>x.type===k)?.value;const shown=`${v('year')}-${v('month')}-${v('day')}T${v('hour')}:${v('minute')}`;if(shown===raw)return new Date(stamp).toISOString();stamp+=target-Date.parse(shown+':00Z');}
+ throw new Error('Quest’ora non esiste per il cambio dell’ora legale. Scegli un altro orario.');
+}
+function pushOptionsMarkup(prefix){return `<div class="pushOptions"><label><span class="fieldLabel">Quando inviare la notifica</span><select class="adminSelect" id="${prefix}PushMode"><option value="now">Subito</option><option value="schedule">Programma data e ora</option></select></label><label><span class="fieldLabel">Data e ora (Italia, solo se programmata)</span><input class="adminInput" id="${prefix}PushAt" type="datetime-local"></label><label><span class="fieldLabel">Testo notifica (facoltativo)</span><textarea maxlength="350" class="adminTextarea" id="${prefix}PushText" placeholder="Vuoto = testo della promozione o dell’avviso" oninput="updatePushPreview('${prefix}')"></textarea></label><button class="adminBtn secondary" type="button" onclick="updatePushPreview('${prefix}')">Aggiorna anteprima</button><div class="pushPreview" id="${prefix}PushPreview"><small>Gelato Club · Anteprima indicativa</small><strong>Titolo del contenuto</strong><p>Il telefono mostrerà l’icona dell’app e il messaggio.</p></div><small class="adminHint">Si invia solo se selezioni la spunta sottostante. L’orario avvia l’invio; la ricezione dipende dal telefono.</small></div>`;}
+function updatePushPreview(prefix){const title=readVal(prefix==='promo'?'admPromoTitle':'noticeTitle'),text=readVal(prefix+'PushText')||readVal(prefix==='promo'?'admPromoDesc':'noticeText');document.getElementById(prefix+'PushPreview').innerHTML=`<small>Gelato Club · Anteprima indicativa</small><strong>${escapeHtml(title||'Gelato Club')}</strong><p>${escapeHtml((text||'Scopri le novità nell’app').slice(0,350))}</p>`;}
+function readPushOptions(prefix,start,end){const scheduledAt=readVal(prefix+'PushMode')==='schedule'?romeDateTime(readVal(prefix+'PushAt')):undefined;const at=scheduledAt?Date.parse(scheduledAt):Date.now();if(scheduledAt&&at<=Date.now())throw new Error('Scegli un orario futuro.');if(start&&at<Date.parse(start))throw new Error('L’invio deve essere dopo l’inizio del contenuto.');if(end&&at>=Date.parse(end))throw new Error('L’invio deve precedere la scadenza.');return {scheduledAt,message:readVal(prefix+'PushText')||undefined};}
+async function cancelPush(index){const job=pushJobs[index];if(!job?.jobId||!confirm('Annullare i tentativi non ancora inviati? Le notifiche già prese in carico non si possono richiamare.'))return;const {data,error}=await sb.functions.invoke('club-push',{body:{action:'cancel',jobId:job.jobId}});if(error||!data?.ok){showToast('Annullamento non confermato dal server.','bad');return;}job.scheduledAt=undefined;job.report='Invio annullato. Le notifiche già prese in carico non vengono richiamate.';rememberPushJobs();renderAll(true);}
+let mediaFiles=[],mediaBusy=false,mediaError='';
+async function listMediaFiles(prefix='',depth=0){
+ if(depth>5)throw new Error('Troppe sottocartelle nella raccolta.');const result=[];
+ for(let offset=0;;offset+=100){const {data,error}=await sb.storage.from('icons').list(prefix,{limit:100,offset,sortBy:{column:'name',order:'asc'}});if(error)throw error;for(const file of data||[]){const path=prefix?prefix+'/'+file.name:file.name;if(!file.id){result.push(...await listMediaFiles(path,depth+1));}else if(/\.(png|jpe?g|webp|gif|svg)$/i.test(file.name)){result.push({name:path,url:publicIconUrl(path),size:Number(file.metadata?.size)||0});}}if(result.length>5000)throw new Error('Raccolta troppo grande: suddividi le immagini.');if((data||[]).length<100)break;}
+ return result;
+}
+function renderMediaLibrary(){return `<div class="container"><div class="adminPanel"><div class="adminPanelTitle">Le immagini della gelateria</div><p class="adminHint">Carica foto dalla galleria e riutilizzale per promo, avvisi, gusti e sfondi. I file già utilizzati non possono essere eliminati.</p><label><span class="fieldLabel">Carica immagini (JPG, PNG, WebP o GIF, massimo 5 MB ciascuna)</span><input class="adminInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple ${mediaBusy?'disabled':''} onchange="uploadMedia(this)"></label><button class="adminBtn secondary" ${mediaBusy?'disabled':''} onclick="refreshMedia()">Aggiorna raccolta</button>${mediaError?`<p role="alert">${escapeHtml(mediaError)}</p>`:''}${mediaBusy?'<p role="status">Caricamento in corso…</p>':''}<div class="mediaGrid">${mediaFiles.map((f,i)=>`<article class="mediaTile"><a href="${escapeHtml(f.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(f.url)}" alt="${escapeHtml(f.name)}" loading="lazy"></a><div class="mediaInfo"><small>${escapeHtml(f.name)} · ${Math.round(f.size/1024)} KB</small><button class="adminBtn danger" ${mediaBusy?'disabled':''} onclick="deleteMedia(${i})">Elimina</button></div></article>`).join('')||(!mediaBusy?'<p>Nessuna immagine trovata.</p>':'')}</div></div></div>`;}
+async function refreshMedia(){if(mediaBusy)return;mediaBusy=true;mediaError='';renderAll(true);try{mediaFiles=await listMediaFiles();iconFiles=mediaFiles;}catch(e){mediaError='Impossibile leggere la raccolta: '+e.message;}finally{mediaBusy=false;if(activeTab==='images')renderAll(true);}}
+async function uploadMedia(input){if(mediaBusy||!staffVerified)return;const files=Array.from(input.files||[]);if(!files.length)return;mediaBusy=true;mediaError='';renderAll(true);let uploaded=0;try{for(const file of files){const ext={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif'}[file.type];if(!ext||file.size>5*1024*1024)throw new Error(file.name+': scegli un formato ammesso entro 5 MB.');const path='media-'+crypto.randomUUID()+'.'+ext;const {error}=await sb.storage.from('icons').upload(path,file,{upsert:false,contentType:file.type});if(error)throw error;uploaded++;}showToast(uploaded+' immagini caricate.','ok');}catch(e){mediaError=e.message+(uploaded?' · '+uploaded+' immagini già caricate.':'');}finally{const savedError=mediaError;mediaBusy=false;await refreshMedia();if(savedError){mediaError=savedError;renderAll(true);}}}
+function usesMedia(value,file){if(typeof value==='string'){if(value===file.name||value===file.url)return true;try{const u=new URL(value),expected=new URL(file.url);return u.origin===expected.origin&&decodeURIComponent(u.pathname)===decodeURIComponent(expected.pathname);}catch{return false;}}if(Array.isArray(value))return value.some(x=>usesMedia(x,file));if(value&&typeof value==='object')return Object.values(value).some(x=>usesMedia(x,file));return false;}
+async function mediaReferences(file){const refs=[];for(const [name,label]of [['promotions.json','promozioni'],['flavors-week.json','calendario gusti'],['promo-presets.json','modelli'],['app-notices.json','avvisi'],['app-appearance.json','tema']]){const value=await readConfigFile(name,{});if(usesMedia(value,file))refs.push(label);}const models=await sb.rpc('staff_flavor_presets');if(models.error)throw new Error('Non posso verificare le immagini dei modelli del calendario.');if(usesMedia(models.data,file))refs.push('modelli del calendario');const {data,error}=await sb.from('loyalty_rewards').select('image_url');if(error)throw new Error('Non posso verificare le immagini dei premi.');if(usesMedia(data,file))refs.push('premi');return refs;}
+async function deleteMedia(index){const file=mediaFiles[index];if(!file||mediaBusy||!staffVerified)return;mediaBusy=true;try{const refs=await mediaReferences(file);if(refs.length)throw new Error('Immagine utilizzata in '+refs.join(', ')+'. Sostituiscila prima di eliminarla.');if(!confirm('Eliminare definitivamente '+file.name+'? Non risulta usata nei contenuti attuali. Controlla anche eventuali link esterni o vecchie versioni dell’app.'))return;const again=await mediaReferences(file);if(again.length)throw new Error('L’immagine è stata collegata a un contenuto: eliminazione fermata.');const {error}=await sb.storage.from('icons').remove([file.name]);if(error)throw error;showToast('Immagine eliminata.','ok');}catch(e){showToast(e.message,'bad');}finally{mediaBusy=false;await refreshMedia();}}
+
+/* Monthly mission editor. No changes to legacy approval / point handlers. */
+let missionMonth = new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit'}).format(new Date());
+let missionDraft = [], missionRevision = 0, missionLocked = false, missionLoading = false, missionBusy = false;
+let missionBackend = false, missionError = '', missionPromoModels = {}, missionLoadedMonth = '';
+let missionRetirementReady=false, missionRetired=[], missionPublishedIds=[];
+function currentMissionMonth(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit'}).format(new Date());}
+function validMissionMonth(value){return /^\d{4}-(0[1-9]|1[0-2])$/.test(value)&&value>=currentMissionMonth();}
+function newMissionSlot(index){return {id:makeId('mission'),slot:index+1,title:'',description:'',requirements:[]};}
+function missionPad(list){const slots=Array.from({length:3},(_,i)=>newMissionSlot(i));for(const [i,m] of list.entries()){const slot=Number(m.slot||i+1);if(slot>=1&&slot<=3)slots[slot-1]={...m,slot};}return slots;}
+function missionDraftKey(month=missionMonth){return 'gelato-mission-draft:'+month;}
+function missionReadDraft(){return missionDraft.map((m,i)=>({...m,slot:i+1,description:document.getElementById('missionDesc'+i)?readVal('missionDesc'+i):m.description,requirements:m.requirements.map((r,j)=>({...r,quantity:document.getElementById('missionSummaryQty'+i+'_'+j)?Number(readVal('missionSummaryQty'+i+'_'+j)):r.quantity}))}));}
+function storeMissionDraft(){localStorage.setItem(missionDraftKey(),JSON.stringify({revision:missionRevision,missions:missionDraft}));}
+function readStoredMissionDraft(month){try{const data=JSON.parse(localStorage.getItem(missionDraftKey(month))||'null');if(Array.isArray(data)&&data.length<=3)return {revision:0,missions:data};if(data&&Array.isArray(data.missions)&&data.missions.length<=3&&Number.isInteger(data.revision))return data;}catch{}return null;}
+function rememberMissionDraft(){if(activeTab==='missions'&&document.getElementById('missionDesc0')){missionDraft=missionReadDraft();try{storeMissionDraft();}catch{}}}
+function missionConfig(list){
+ return list.map((m,i)=>({...m,slot:i+1})).filter(m=>m.description||m.requirements.length).map(m=>{
+  if(!m.description||!m.requirements.length)throw new Error('Per ogni missione compila la descrizione e aggiungi almeno una promozione.');
+  const keys=new Set();let kind='';for(const r of m.requirements){if(!Number.isInteger(r.quantity)||r.quantity<1||r.quantity>20)throw new Error('Scegli da 1 a 20 convalide per promozione.');if(keys.has(r.key))throw new Error('La promozione è già presente nella missione.');const next=r.key.split(':')[0];if(!['promo','model'].includes(next)||kind&&next!==kind)throw new Error('Non mescolare i vecchi modelli con le singole promozioni.');kind=next;keys.add(r.key);}
+  return {id:m.id,slot:m.slot,title:m.title||'Missione '+m.slot,description:m.description,requirements:m.requirements};
+ });
+}
+async function fetchMissionMonth(value,preferDraft=true){
+ if(!staffVerified)throw new Error('Accedi come staff.');
+ const {data,error}=await sb.rpc('staff_mission_month',{p_month:value+'-01'});
+ if(error&&error.code!=='PGRST202')throw error;
+ const saved=preferDraft?readStoredMissionDraft(value):null;
+ if(error){missionMonth=value;missionLoadedMonth=value;missionDraft=missionPad(saved?.missions||[]);missionRevision=saved?.revision||0;missionLocked=false;missionBackend=false;missionError='Missioni non ancora attivate sul server. I collegamenti vengono salvati come bozze su questo dispositivo.';return;}
+ if(!data||!Array.isArray(data.missions))throw new Error('Risposta missioni non valida.');
+ missionMonth=value;missionLoadedMonth=value;missionRevision=data.revision;missionLocked=!!data.locked;missionPromoModels=data.promoModels||{};missionBackend=true;missionRetirementReady=!!data.retirementReady;missionRetired=data.retired||[];missionPublishedIds=data.missions.map(m=>m.id);
+ missionDraft=missionPad(saved&&saved.revision===data.revision?saved.missions.filter(m=>!missionRetired.some(x=>x.id===m.id)):data.missions);
+ missionError=saved&&saved.revision!==data.revision?'Il server è stato aggiornato da un altro dispositivo: ho caricato il riepilogo pubblicato. La vecchia bozza locale resta disponibile.':'';
+}
+async function loadMissionMonth(value=missionMonth,preferDraft=false){
+ if(missionBusy||missionLoading)return;
+ if(!validMissionMonth(value)){showToast('Scegli il mese attuale o un mese futuro.','bad');return;}
+ rememberMissionDraft();missionLoading=true;missionError='';renderAll(true);
+ try{await Promise.all([loadPromotions(),loadExperience()]);await fetchMissionMonth(value,preferDraft);}catch(e){missionError=String(e.message||e);}finally{missionLoading=false;renderAll(true);}
+}
+function saveMissionDraft(){try{missionDraft=missionReadDraft();storeMissionDraft();showToast('Bozza salvata su questo dispositivo. Non è ancora pubblicata.','ok');}catch{showToast('Non riesco a salvare la bozza sul dispositivo.','bad');}}
+function restoreMissionDraft(){const saved=readStoredMissionDraft(missionMonth);if(!saved){showToast('Nessuna bozza disponibile per questo mese.','bad');return;}if(missionBackend&&saved.revision!==missionRevision){showToast('Questa bozza appartiene a una versione precedente del mese: non sovrascrivo il server.','bad');return;}missionDraft=missionPad(saved.missions);renderAll(true);showToast('Bozza locale ripristinata.','ok');}
+async function persistMissionMonth(){
+ const config=missionConfig(missionDraft);
+ if(missionRetirementReady)await syncMissionCatalog();
+ const {data,error}=await sb.rpc('staff_save_mission_month',{p_month:missionMonth+'-01',p_missions:config,p_revision:missionRevision});if(error)throw error;
+ missionRevision=data.revision;missionLocked=!!data.locked;missionPromoModels=data.promoModels||{};missionDraft=missionPad(data.missions);missionRetired=data.retired||[];missionPublishedIds=data.missions.map(m=>m.id);missionRetirementReady=!!data.retirementReady;storeMissionDraft();
+}
+async function publishMissionMonth(){
+ if(missionBusy||missionLoading||!missionBackend)return;
+ try{missionDraft=missionReadDraft();missionConfig(missionDraft);}catch(e){showToast(e.message,'bad');return;}
+ if(!confirm(`Salvare le missioni di ${missionMonth}? Tutte le promozioni richieste devono essere convalidate nello stesso giorno. Dopo l’inizio dei tentativi puoi correggere soltanto le descrizioni.`))return;
+ missionBusy=true;try{await persistMissionMonth();showToast('Missioni salvate sul server. Il mese futuro partirà automaticamente.','ok');}catch(e){try{storeMissionDraft();}catch{}showToast('Salvataggio non riuscito: '+e.message+'. La bozza resta su questo dispositivo.','bad');}finally{missionBusy=false;renderAll(true);}
+}
+async function deletePublishedMission(slot){
+  if(missionBusy||missionLoading||managerBusy||!missionBackend||!missionRetirementReady)return;
+  const mission=missionDraft[slot];if(!mission||!missionPublishedIds.includes(mission.id))return;
+  if(!confirm(`Eliminare ${mission.title||'Missione '+(slot+1)} dal mese ${missionMonth}? Sparirà dall’app anche se ci sono tentativi in corso. Completamenti e livelli già acquisiti restano validi; punti e riscatti non cambiano.`))return;
+  missionBusy=true;
+  try{const {data,error}=await sb.rpc('staff_delete_club_mission',{p_month:missionMonth+'-01',p_mission_id:mission.id,p_revision:missionRevision});if(error)throw error;missionRevision=data.revision;missionLocked=!!data.locked;missionRetired=data.retired||[];missionPublishedIds=data.missions.map(m=>m.id);missionDraft=missionPad(data.missions);storeMissionDraft();showToast('Missione eliminata dal server. Risultati e livelli conservati.','ok');}
+  catch(e){showToast('Eliminazione non riuscita: '+String(e.message||e)+'. Ricarica dal server prima di riprovare.','bad');}
+  finally{missionBusy=false;renderAll(true);}
+}
+function removeMissionRequirement(slot,index){if(missionBusy||missionLocked)return;missionDraft=missionReadDraft();missionDraft[slot].requirements.splice(index,1);try{storeMissionDraft();}catch{}renderAll(true);showToast('Collegamento rimosso dalla bozza. Salva le missioni per aggiornare il server.','ok');}
+function missionLinkControls(prefix,isNew=false,promo=null){
+ const linked=promo?missionDraft.flatMap((m,i)=>m.requirements.filter(r=>r.key==='promo:'+promo.id).map(r=>({slot:i,quantity:r.quantity}))):[];
+ const chosen=linked[0],disabled=missionBusy||missionLoading||managerBusy?'disabled':'';
+ return `<div class="promoMissionBox"><label class="checkLine"><input type="checkbox" id="${prefix}Enabled" ${chosen?'checked':''} ${disabled} onchange="toggleMissionLink('${prefix}')">Aggiungi a una missione</label><div id="${prefix}Fields" class="promoMissionFields" ${chosen?'':'hidden'}><label><span class="fieldLabel">Mese</span><input class="adminInput" type="month" id="${prefix}Month" min="${currentMissionMonth()}" value="${missionMonth}" ${disabled}></label><label><span class="fieldLabel">Missione</span><select class="adminSelect" id="${prefix}Slot" ${disabled}>${[0,1,2].map(i=>`<option value="${i}" ${chosen?.slot===i?'selected':''}>Missione ${i+1}</option>`).join('')}</select></label><label><span class="fieldLabel">Quantità richiesta</span><input class="adminInput" type="number" id="${prefix}Qty" value="${chosen?.quantity||1}" min="1" max="20" step="1" ${disabled}></label></div><p class="adminHint">${isNew?'Il collegamento viene aggiunto dopo la pubblicazione della promo, anche se parti da un modello.':'Scegli un’altra missione per collegare questa promo anche lì. Per rimuoverla usa il riepilogo Missioni.'}</p>${!isNew?`<button type="button" class="adminBtn secondary" ${disabled} onclick="savePublishedMissionLink('${prefix}')">Salva collegamento</button>`:''}${linked.length?`<div class="missionLinksBadges">${linked.map(l=>`<span>Missione ${l.slot+1} · ${l.quantity} ${l.quantity===1?'convalida':'convalide'}</span>`).join('')}</div>`:''}</div>`;
+}
+function toggleMissionLink(prefix){const check=document.getElementById(prefix+'Enabled'),fields=document.getElementById(prefix+'Fields');if(fields)fields.hidden=!check?.checked;}
+function readMissionLink(prefix){
+ if(!document.getElementById(prefix+'Enabled')?.checked)return null;
+ const month=readVal(prefix+'Month'),slot=Number(readVal(prefix+'Slot')),quantity=Number(readVal(prefix+'Qty'));
+ if(!validMissionMonth(month)||!Number.isInteger(slot)||slot<0||slot>2||!Number.isInteger(quantity)||quantity<1||quantity>20)throw new Error('Missione: scegli un mese valido, Missione 1/2/3 e una quantità da 1 a 20.');
+ return {month,slot,quantity};
+}
+async function prepareMissionLink(link){
+ if(!staffVerified)throw new Error('Accedi come staff.');
+ rememberMissionDraft();
+ if(missionLoadedMonth===link.month){
+  const {data,error}=await sb.rpc('staff_mission_month',{p_month:link.month+'-01'});
+  if(error&&error.code!=='PGRST202')throw error;
+  if(error)missionBackend=false;
+  if(!error){if(data.revision!==missionRevision)throw new Error('Il mese è stato modificato da un altro dispositivo. Ricarica le missioni prima di collegare la promo.');missionLocked=!!data.locked;missionBackend=true;}
+ }else await fetchMissionMonth(link.month,true);
+ if(missionLocked)throw new Error('I tentativi del mese sono già iniziati. Scegli il mese successivo.');
+ if(missionDraft[link.slot].requirements.some(r=>r.key.startsWith('model:')))throw new Error('Questa missione usa i precedenti collegamenti per modello. Prima dei tentativi rimuovili dal riepilogo e aggiungi le singole promo.');
+}
+async function attachPromoMission(promo,link){
+ const m=missionDraft[link.slot],key='promo:'+promo.id;
+ const requirement={key,label:promo.title,quantity:link.quantity};
+ m.title=m.title||'Missione '+(link.slot+1);m.requirements=m.requirements.filter(r=>r.key!==key).concat(requirement);
+ storeMissionDraft();
+ // Empty descriptions keep the link in a local draft; never invent text for the customer.
+ if(!missionBackend)return 'Collegamento salvato in bozza locale. Il server missioni sarà attivato al rilascio.';
+ try{missionConfig(missionDraft);}catch{return 'Collegamento salvato in bozza. Completa le descrizioni nel riepilogo Missioni e salva sul server.';}
+ try{await persistMissionMonth();return 'Promozione collegata alla Missione '+(link.slot+1)+' sul server.';}catch(e){return 'Collegamento in bozza; salvataggio sul server non riuscito: '+e.message;}
+}
+async function savePublishedMissionLink(prefix){
+ if(missionBusy||missionLoading||managerBusy)return;
+ const index=Number(prefix.replace('promoMission','')),promo=promotions[index];if(!promo)return;
+ let link;try{link=readMissionLink(prefix);if(!link)throw new Error('Seleziona “Aggiungi a una missione”.');}catch(e){showToast(e.message,'bad');return;}
+ missionBusy=true;try{await prepareMissionLink(link);const message=await attachPromoMission(promo,link);showToast(message,'ok');}catch(e){showToast('Collegamento non riuscito: '+e.message,'bad');}finally{missionBusy=false;renderAll(true);}
+}
+function renderMissions(){
+ const disabled=missionBusy||missionLoading?'disabled':'',ruleDisabled=disabled||missionLocked?'disabled':'';
+ return `<div class="container adminWrap"><div class="adminPanel"><div class="adminPanelTitle">Missioni mensili</div><p class="adminHint">Aggiungi le promozioni dalla loro pagina con la spunta “Aggiungi a una missione”. Qui scrivi le descrizioni e controlli il riepilogo. Tutti i requisiti vanno completati nello stesso giorno, con lo stesso account, dopo la convalida staff.</p><div class="formRow2"><label><span class="fieldLabel">Mese delle missioni</span><input type="month" class="adminInput" min="${currentMissionMonth()}" value="${escapeHtml(missionMonth)}" ${disabled} onchange="loadMissionMonth(this.value,true)"></label><div class="buttonRow"><button class="adminBtn secondary" ${disabled} onclick="loadMissionMonth()">Ricarica dal server</button><button class="adminBtn secondary" ${disabled} onclick="restoreMissionDraft()">Riprendi bozza locale</button><button class="adminBtn secondary" ${disabled} onclick="setTab('managePromos')">Vai alle promozioni →</button></div></div>${missionError?`<div class="statusNote" role="status">${escapeHtml(missionError)}</div>`:''}${missionRetired.length?`<div class="statusNote">Missioni ritirate: ${missionRetired.map(m=>escapeHtml(m.title)).join(', ')}. Risultati e livelli già ottenuti sono conservati.</div>`:''}${missionLocked?'<div class="statusNote">I tentativi sono iniziati: puoi correggere le descrizioni oppure eliminare una missione. Requisiti e quantità restano protetti; completamenti e livelli vengono conservati.</div>':''}</div>
+ <div class="missionStaffGrid">${missionDraft.map((m,i)=>`<div class="adminPanel"><div class="adminPanelTitle">Missione ${i+1}</div>${missionPublishedIds.includes(m.id)?`<button type="button" class="adminBtn danger" ${disabled||!missionRetirementReady?'disabled':''} onclick="deletePublishedMission(${i})">Elimina missione</button>`:''}<label><span class="fieldLabel">Descrizione visibile nell’app</span><textarea id="missionDesc${i}" class="adminTextarea" maxlength="1200" ${disabled} placeholder="Spiega cosa deve fare il cliente, ad esempio due crêpe e una vaschetta nello stesso giorno.">${escapeHtml(m.description)}</textarea></label><div class="fieldLabel">Promozioni collegate (${m.requirements.length})</div>${m.requirements.length?m.requirements.map((r,j)=>`<div class="missionSummaryRow"><b>${escapeHtml(r.label)}</b><label><span class="fieldLabel">Quantità</span><input class="adminInput" id="missionSummaryQty${i}_${j}" type="number" min="1" max="20" step="1" ${ruleDisabled} value="${r.quantity}"></label><button type="button" class="adminBtn secondary" ${ruleDisabled} onclick="removeMissionRequirement(${i},${j})">Rimuovi</button></div>`).join(''):'<p class="adminHint">Nessuna promozione collegata. Aggiungila dalla pagina Promozioni, durante la creazione o dal riepilogo delle promo pubblicate.</p>'}</div>`).join('')}</div>
+ <div class="adminPanel"><div class="buttonRow"><button class="adminBtn secondary" ${disabled} onclick="saveMissionDraft()">Salva bozza sul dispositivo</button><button class="adminBtn" ${disabled||!missionBackend?'disabled':''} onclick="publishMissionMonth()">${missionBusy?'Salvo…':'Salva missioni sul server'}</button></div><p class="adminHint">Se manca una descrizione, i collegamenti restano in bozza. Il salvataggio sul server li rende disponibili nell’app. Ogni 3 missioni completate si sale di livello; il saldo punti resta indipendente.</p></div></div>`;
+}
+
+
+let syncChannel = null;
+function getSyncChannel(){
+  try{
+    if(syncChannel) return syncChannel;
+    syncChannel = sb.channel("gelato-sync");
+    syncChannel.subscribe();
+    return syncChannel;
+  }catch(e){
+    console.warn("sync channel init error", e);
+    return null;
+  }
+}
+async function sendRedemptionUpdate(id, status){
+  const ch = getSyncChannel();
+  if(!ch) return;
+
+  let client_ref = "";
+  try{
+    const { data } = await sb
+      .from("redemptions")
+      .select("id,client_ref,status")
+      .eq("id", id)
+      .maybeSingle();
+
+    client_ref = data?.client_ref || "";
+  }catch(e){
+    console.warn("client_ref lookup failed", e);
+  }
+
+  try{
+    await ch.send({
+      type:"broadcast",
+      event:"redemption:update",
+      payload:{ id, redemption_id:id, status, client_ref }
+    });
+  }catch(e){
+    console.warn("broadcast redemption:update failed", e);
+  }
+}
+
+let promotions = [];
+let totalCount = 0;
+let focusMode = false;
+let activeTab = (localStorage.getItem("kiosk_tab") || "promo");
+if(!["promo","rewards","users","managePromos","manageRewards","manageNews","notices","appearance","images","missions"].includes(activeTab)) activeTab = "promo";
+let pendingPromoIds = new Set();
+let pendingRewardIds = new Set();
+let online = true;
+let lastError = "";
+let promoRows = [];
+let rewardRows = [];
+let managedRewards = [];
+let managerBusy = false;
+let managedFlavors = [];
+let flavorBusy = false;
+let iconFiles = [];
+let iconPickerTarget = null;
+let iconPickerLoading = false;
+// Keyboard navigation state
+let navMode = false; // true after user presses any navigation key
+let selectedKind = activeTab; // 'promo' or 'rewards'
+let selectedIndex = 0;
+let lastTopPromoId = null;
+let lastTopRewardId = null;
+
+function isCardSelected(kind, idx){
+  return selectedKind === kind && selectedIndex === idx;
+}
+
+function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+
+function getCurrentCards(){
+  if(activeTab !== "promo" && activeTab !== "rewards") return { kind: activeTab, cards: [] };
+  const kind = (activeTab === "rewards") ? "rewards" : "promo";
+  const cards = kind === "promo" ? (promoRows || []) : (rewardRows || []);
+  return { kind, cards };
+}
+
+function selectCard(kind, idx){
+  selectedKind = kind;
+  selectedIndex = idx;
+  navMode = true;
+  renderAll();
+}
+
+function armAutoSelect(kind){
+  selectedKind = kind;
+  selectedIndex = 0;
+  navMode = false;
+}
+
+function handleNewTop(kind){
+  // if a new request arrives while navigating, go back to auto-select mode (Enter-ready)
+  armAutoSelect(kind);
+}
+
+function initKeyboardOnce(){
+  if(window.__kioskKeyboardInit) return;
+  window.__kioskKeyboardInit = true;
+
+  document.addEventListener("keydown", (e)=>{
+    const tag = String(e.target?.tagName || "").toLowerCase();
+    if(tag === "input" || tag === "textarea" || tag === "select" || e.target?.isContentEditable){
+      return;
+    }
+
+    const key = e.key;
+    const code = e.code || "";
+
+    const isNum = (k)=> key === String(k) || code === ("Numpad"+k);
+    const isEnter = key === "Enter" || code === "NumpadEnter";
+    const isBack = key === "Backspace" || key === "Delete" || code === "Backspace" || code === "Delete" || isNum(0);
+
+    if(isNum(4)){
+      e.preventDefault();
+      selectedKind = "promo";
+      selectedIndex = 0;
+      navMode = true;
+      setTab("promo");
+      return;
+    }
+    if(isNum(6)){
+      e.preventDefault();
+      selectedKind = "rewards";
+      selectedIndex = 0;
+      navMode = true;
+      setTab("rewards");
+      return;
+    }
+
+    if(isNum(8) || key === "ArrowUp"){
+      e.preventDefault();
+      const { kind, cards } = getCurrentCards();
+      if(!cards.length) return;
+      selectedKind = kind;
+      selectedIndex = clamp(selectedIndex - 1, 0, cards.length - 1);
+      navMode = true;
+      renderAll();
+      return;
+    }
+    if(isNum(2) || key === "ArrowDown"){
+      e.preventDefault();
+      const { kind, cards } = getCurrentCards();
+      if(!cards.length) return;
+      selectedKind = kind;
+      selectedIndex = clamp(selectedIndex + 1, 0, cards.length - 1);
+      navMode = true;
+      renderAll();
+      return;
+    }
+
+    if(isEnter){
+      e.preventDefault();
+      triggerPrimaryAction();
+      return;
+    }
+
+    if(isBack){
+      e.preventDefault();
+      triggerSecondaryAction();
+      return;
+    }
+  });
+}
+
+function getSelectedMeta(){
+  const kind = selectedKind;
+  const list = kind === "promo" ? (promoRows || []) : (rewardRows || []);
+  if(!list.length) return null;
+  const idx = clamp(selectedIndex, 0, list.length - 1);
+  const row = list[idx];
+  if(!row) return null;
+
+  if(kind === "promo"){
+    const title = (getPromoTitle(row.promo_id) || row.promo_id || "");
+    return { kind, id: row.id, title };
+  }else{
+    const title = (getRewardTitle(row.reward_id) || row.reward_id || "");
+    return { kind, id: row.id, title };
+  }
+}
+
+function triggerPrimaryAction(){
+  const meta = getSelectedMeta();
+  if(!meta) return;
+  if(meta.kind === "promo"){
+    approve(meta.id, String(meta.title).replace(/'/g,"\'"));
+  }else{
+    approveReward(meta.id, String(meta.title).replace(/'/g,"\'"));
+  }
+}
+
+function triggerSecondaryAction(){
+  const meta = getSelectedMeta();
+  if(!meta) return;
+  if(meta.kind === "promo"){
+    cancel(meta.id, String(meta.title).replace(/'/g,"\'"));
+  }else{
+    rejectReward(meta.id, String(meta.title).replace(/'/g,"\'"));
+  }
+}
+
+
+
+// Compact activity + users
+let activityStats = { ready:false, days:[] };
+let lastActivityFetch = 0;
+let usersRows = [];
+let usersSearch = localStorage.getItem("kiosk_users_search") || "";
+let usersLoading = false;
+let usersError = "";
+let pointPendingIds = new Set();
+let lastUsersFetch = 0;
+
+function escapeHtml(v){ return String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
+function normalizeEmail(v){ return String(v || "").trim().toLowerCase(); }
+function isUsersSearchFocused(){
+  return activeTab === "users" && document.activeElement && document.activeElement.id === "usersSearchInput";
+}
+function isManagementTab(){
+  return ["managePromos","manageRewards","manageNews","notices","appearance","images","missions"].includes(activeTab);
+}
+function isFormControlFocused(){
+  const el = document.activeElement;
+  if(!el) return false;
+
+  const tag = String(el.tagName || "").toLowerCase();
+  return tag === "input" || tag === "textarea" || tag === "select" || !!el.isContentEditable;
+}
+function safeRenderAll(){
+  // Non ricostruire il DOM mentre scrivi:
+  // su mobile ogni render chiude la tastiera e svuota i campi.
+  // Le tab di gestione si aggiornano solo quando entri, salvi o premi azioni esplicite.
+  if(isUsersSearchFocused()) return;
+  if(isManagementTab()) return;
+  if(isFormControlFocused()) return;
+
+  renderAll();
+}
+
+async function loadActivityStats(force=false){
+  const nowMs = Date.now();
+  if(!force && (nowMs - lastActivityFetch) < 30000) return;
+  lastActivityFetch = nowMs;
+  const sinceISO = startOfNDaysAgoLocalISO(6);
+  try{
+    const { data, error } = await sb.from("redemptions").select("created_at,status").in("status", ["approved", "canceled", "rejected", "expired"]).gte("created_at", sinceISO).order("created_at", { ascending:true }).limit(5000);
+    if(error) throw error;
+    const keys = [], map = {};
+    // Ordine decrescente: oggi in alto, poi ieri, ecc. Non cambia i dati, solo l'ordine visuale.
+    for(let i=0;i<=6;i++){
+      const d=new Date();
+      d.setHours(0,0,0,0);
+      d.setDate(d.getDate()-i);
+      const key=dateKeyLocal(d);
+      keys.push(key);
+      map[key]={ key, label:d.toLocaleDateString("it-IT", { day:"2-digit", month:"2-digit" }), approved:0, canceled:0 };
+    }
+    (data||[]).forEach(r=>{ const key=dateKeyLocal(new Date(r.created_at)); if(!map[key]) return; const st=String(r.status||"").toLowerCase(); if(st==="approved") map[key].approved++; if(st==="canceled"||st==="rejected"||st==="expired") map[key].canceled++; });
+    activityStats = { ready:true, days:keys.map(k=>map[k]) };
+    safeRenderAll();
+  }catch(e){ console.error("loadActivityStats error", e); }
+}
+
+async function loadUsers(force=false){
+  // La pagina Utenti NON deve aggiornarsi da sola: su mobile ogni render chiude la tastiera.
+  // Questa funzione viene chiamata solo quando apri la tab Utenti o premi Aggiorna.
+  if(!force) return;
+
+  usersLoading = true;
+  usersError = "";
+  if(activeTab === "users") renderDashboard(promoRows); else renderAll();
+
+  try{
+    const { data, error } = await sb
+      .from("clients")
+      .select("id,email,points,last_redeem")
+      .order("email", { ascending:true })
+      .limit(5000);
+
+    if(error) throw error;
+
+    // Deduplica per email: se ci sono doppioni tiene la riga con più punti.
+    const byEmail = new Map();
+    (data || []).forEach(row => {
+      const email = normalizeEmail(row.email || "");
+      if(!email) return;
+      const clean = {
+        id: row.id,
+        email: email,
+        points: Number(row.points || 0),
+        last_redeem: row.last_redeem || null
+      };
+      const prev = byEmail.get(email);
+      if(!prev || Number(clean.points || 0) > Number(prev.points || 0)){
+        byEmail.set(email, clean);
+      }
+    });
+    usersRows = Array.from(byEmail.values()).sort((a,b)=>String(a.email).localeCompare(String(b.email)));
+  }catch(e){
+    console.error("loadUsers error", e);
+    usersError = e?.message || String(e);
+    usersRows = [];
+  }finally{
+    usersLoading = false;
+    if(activeTab === "users") renderDashboard(promoRows);
+    else if(!isManagementTab()) renderAll();
+
+    setTimeout(filterUserRowsInDom, 0);
+  }
+}
+
+function onUserSearch(v){
+  usersSearch = v || "";
+  try{ localStorage.setItem("kiosk_users_search", usersSearch); }catch{}
+  filterUserRowsInDom();
+}
+
+function filterUserRowsInDom(){
+  const input = document.getElementById("usersSearchInput");
+  if(input && input.value !== usersSearch) input.value = usersSearch;
+  const q = normalizeEmail(usersSearch);
+  document.querySelectorAll(".userRow[data-email]").forEach(row=>{
+    const email = normalizeEmail(row.getAttribute("data-email") || "");
+    row.style.display = (!q || email.includes(q)) ? "grid" : "none";
+  });
+}
+
+async function changeUserPoints(id, delta){
+  if(!id || pointPendingIds.has(id)) return;
+
+  const idx = usersRows.findIndex(u => String(u.id) === String(id));
+  if(idx < 0){ showToast("❌ Utente non trovato", "bad"); return; }
+
+  const user = usersRows[idx];
+  const email = normalizeEmail(user.email || "");
+  if(!email){ showToast("❌ Email utente mancante", "bad"); return; }
+
+  const current = Number(user.points || 0);
+
+  pointPendingIds.add(id);
+  updateUserRowPendingInDom(id, true);
+
+  try{
+    // Aggiornamento server-side sicuro.
+    // La funzione Supabase public.adjust_client_points(email, delta) aggiorna public.clients.points
+    // e restituisce il nuovo valore reale salvato nel DB.
+    const { data, error } = await sb.rpc("adjust_client_points", {
+      p_email: email,
+      p_delta: Number(delta || 0)
+    });
+
+    if(error) throw error;
+
+    const newPoints = Math.max(0, Number(data ?? current));
+    usersRows[idx] = { ...user, points: newPoints };
+    updateUserRowPointsInDom(id, newPoints, false);
+    showToast((delta > 0 ? "✅ +1 punto" : "✅ -1 punto") + " • " + email, "ok");
+  }catch(e){
+    console.error("changeUserPoints rpc error", e);
+    updateUserRowPointsInDom(id, current, false);
+    showToast("❌ Errore punti: " + String(e?.message || e).slice(0,140), "bad");
+  }finally{
+    pointPendingIds.delete(id);
+    updateUserRowPendingInDom(id, false);
+  }
+}
+
+function cssEscapeSimple(v){ return String(v).replace(/\\/g,"\\\\").replace(/"/g,'\\"'); }
+function updateUserRowPointsInDom(id, points, pending){
+  const row = document.querySelector(`.userRow[data-id="${cssEscapeSimple(id)}"]`);
+  if(!row) return;
+  const p = row.querySelector(".userPoints");
+  if(p) p.textContent = `${Number(points || 0)} pt`;
+  updateUserRowPendingInDom(id, pending);
+}
+function updateUserRowPendingInDom(id, pending){
+  const row = document.querySelector(`.userRow[data-id="${cssEscapeSimple(id)}"]`);
+  if(!row) return;
+  row.querySelectorAll("button").forEach(btn => { btn.disabled = !!pending; });
+}
+
+
+async function loadPromotions(){
+  const res = await fetch("https://cbgwfngseoppybsbbwwo.supabase.co/storage/v1/object/public/config/promotions.json", { cache: "no-store" });
+  if(!res.ok){
+    const txt = await res.text();
+    throw new Error("Impossibile caricare promotions.json (" + res.status + "). URL: https://cbgwfngseoppybsbbwwo.supabase.co/storage/v1/object/public/config/promotions.json. Risposta: " + txt.slice(0,120));
+  }
+  promotions = await res.json();
+}
+
+function makeId(prefix="item"){
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+}
+function readVal(id){
+  return String(document.getElementById(id)?.value ?? "").trim();
+}
+function readNum(id, fallback=0){
+  const n = Number(readVal(id));
+  return Number.isFinite(n) ? n : fallback;
+}
+function normalizeDateInput(v){
+  const s = String(v || "").trim();
+  return s || undefined;
+}
+function dateInputToMs(v){
+  const s = String(v || "").trim();
+  if(!s) return undefined;
+  const t = Date.parse(romeDateTime(s + "T00:00"));
+  return Number.isFinite(t) ? t : undefined;
+}
+function normalizeNullableDate(v){
+  const s = String(v || "").trim();
+  return s || null;
+}
+function getRewardCostValue(r){
+  return Math.max(0, Number((r && (r.cost_points ?? r.cost)) ?? 0));
+}
+function encodeStoragePath(path){
+  return String(path || "")
+    .split("/")
+    .map(part => encodeURIComponent(part))
+    .join("/");
+}
+function publicIconUrl(name){
+  const encoded = encodeStoragePath(name);
+  return `https://cbgwfngseoppybsbbwwo.supabase.co/storage/v1/object/public/icons/${encoded}`;
+}
+function getPromoImageUrl(p){
+  return String(p?.iconUrl || p?.icon_url || p?.image_url || p?.imageUrl || "").trim();
+}
+function getPromoBadgeForView(p){
+  const raw=String(p?.badge || p?.badge_label || "").trim();return PROMO_BADGES.find(([key,label])=>key===raw||label.toLowerCase()===raw.toLowerCase())?.[1]||raw;
+}
+async function savePromotions(){
+  const payload = JSON.stringify(promotions, null, 2);
+  const file = new Blob([payload], { type: "application/json" });
+
+  const { error } = await sb.storage
+    .from("config")
+    .upload("promotions.json", file, {
+      cacheControl: "0",
+      contentType: "application/json",
+      upsert: true
+    });
+
+  if(error) throw error;
+}
+async function addManagedPromo(){
+  if(managerBusy) return;
+
+  // IMPORTANTE:
+  // Leggiamo TUTTI i campi prima di fare renderAll(true).
+  // Prima il DOM veniva ricostruito dopo aver letto solo il titolo:
+  // quindi descrizione, immagine e badge tornavano vuoti.
+  const title = readVal("admPromoTitle");
+  const desc = readVal("admPromoDesc");
+  const points = Math.max(0, Math.min(5, readNum("admPromoPoints", 1)));
+  const days = Math.max(1, readNum("admPromoDays", 3));
+  const imageUrl = String(document.getElementById("admPromoImage")?.value || readVal("admPromoImage") || "").trim();
+  const fromRaw = readVal("admPromoFrom");
+  const toRaw = readVal("admPromoTo");
+  const badge = readVal("admPromoBadge");
+  const priceLabel = readVal("admPromoPrice");
+  const missionPreset = readVal("admPromoPreset").split(':');
+  const missionSource = missionPreset[0]==='saved' ? promoPresets[Number(missionPreset[1])] : missionPreset[0]==='live' ? promotions[Number(missionPreset[1])] : null;
+  const missionModelId = missionPreset[0]==='saved' ? missionSource?.id : missionSource?.missionModelId;
+  const wantsPush = !!document.getElementById("admPromoPush")?.checked;
+  let savingsCents,pushOptions,promoMissionLink;
+  try { promoMissionLink=readMissionLink('promoMissionNew');savingsCents=readSavingsCents();pushOptions=wantsPush?readPushOptions('promo',fromRaw?romeDateTime(fromRaw+'T00:00'):undefined,toRaw?romeDateTime(toRaw+'T00:00'):undefined):null; } catch(e){showToast(e.message,'bad');return;}
+  const now = Date.now();
+
+  if(!title){
+    showToast("❌ Inserisci il titolo promo", "bad");
+    return;
+  }
+
+  if(fromRaw && toRaw && fromRaw >= toRaw){showToast("La fine deve essere dopo l’inizio.","bad");return;}
+  if(toRaw && dateInputToMs(toRaw) <= now){showToast("Scegli una scadenza futura.","bad");return;}
+
+  if(promoMissionLink){
+    managerBusy=true;const button=document.querySelector('[onclick="addManagedPromo()"]');if(button)button.disabled=true;
+    try{await prepareMissionLink(promoMissionLink);}catch(e){managerBusy=false;if(button)button.disabled=false;showToast('Promozione non pubblicata: '+e.message,'bad');return;}
+  }
+
+  const next = {
+    priceLabel,
+    missionModelId,
+    savingsCents,
+    id: "p" + Math.random().toString(36).slice(2, 7),
+    title,
+    desc,
+    points,
+    durationDays: days,
+    createdAt: now,
+    icon: "🍦",
+    iconUrl: imageUrl || undefined,
+    activeFrom: dateInputToMs(fromRaw),
+    activeTo: dateInputToMs(toRaw),
+    badge: badge || undefined,
+
+    // Campi duplicati per compatibilità con eventuali versioni future.
+    description: desc,
+    cost_points: points,
+    days,
+    image_url: imageUrl || null,
+    icon_url: imageUrl || null,
+    active_from: normalizeDateInput(fromRaw) || null,
+    active_to: normalizeDateInput(toRaw) || null,
+    created_at: new Date(now).toISOString()
+  };
+
+  managerBusy = true;
+  let published = false;
+  const publishButton = document.querySelector('[onclick="addManagedPromo()"]');
+  if(publishButton) publishButton.disabled = true;
+
+  try{
+    await loadPromotions();
+    promotions = [next, ...(promotions || [])];
+    await savePromotions();
+    published = true;
+    let savingsWarning='';
+    if(savingsCents>0){const {error}=await sb.rpc('set_promo_savings',{p_promo_id:next.id,p_cents:savingsCents});if(error)savingsWarning=' Il risparmio è salvato nella promo; il conteggio sarà attivato al rilascio.';}
+
+    actionFeedback = wantsPush ? await requestContentPush("promo", next,pushOptions) : "Promozione pubblicata. Puoi aggiungerne altre usando lo stesso menu.";
+    actionFeedback += savingsWarning;
+    if(missionModelId){const {error}=await sb.rpc('staff_set_mission_promo',{p_promo_id:next.id,p_model_id:String(missionModelId)});if(error)actionFeedback+=' Il modello è salvato nella promo; il conteggio missioni sarà attivato al rilascio.';}
+    if(promoMissionLink){try{actionFeedback+=' '+await attachPromoMission(next,promoMissionLink);}catch(e){actionFeedback+=' Promozione pubblicata; collegamento non salvato: '+e.message+'. Puoi riprovare dalla lista delle promo.';}}
+    showToast("Promozione pubblicata", "ok");
+  }catch(e){
+    console.error(e);
+    showToast("❌ Errore salvataggio promo: " + String(e?.message || e).slice(0,120), "bad");
+  }finally{
+    managerBusy = false;
+    if(published) renderAll(true);
+    else if(publishButton) publishButton.disabled = false;
+  }
+}
+async function syncMissionCatalog(){
+  const {data,error}=await sb.functions.invoke('club-push',{body:{action:'mission-sync'}});
+  if(error||!data?.ok)throw new Error(data?.error||'Non riesco ad aggiornare le missioni collegate. Riprova.');
+  return data;
+}
+async function removeManagedPromo(id){
+  if(managerBusy||missionBusy||missionLoading)return;
+  managerBusy=true;let removed=false;
+  try{
+    await syncMissionCatalog();
+    await loadPromotions();
+    if(!promotions.some(p=>String(p.id)===String(id)))throw new Error('La promozione non è più presente. Ricarica.');
+    const {data:impact,error}=await sb.rpc('staff_promo_mission_impact',{p_promo_id:String(id)});if(error)throw error;
+    const details=(impact||[]).map(m=>`${m.title} · ${m.month.slice(0,7)}`).join('\n');
+    if(!confirm('Eliminare questa promozione?'+(details?'\n\nVerranno ritirate anche queste missioni:\n'+details:'\nNon risultano missioni collegate.')+'\n\nCompletamenti, livelli e punti già ottenuti restano invariati.'))return;
+    const again=await sb.rpc('staff_promo_mission_impact',{p_promo_id:String(id)});if(again.error)throw again.error;
+    if(JSON.stringify(again.data)!==JSON.stringify(impact))throw new Error('Le missioni collegate sono cambiate. Riprova per leggere il riepilogo aggiornato.');
+    await loadPromotions();
+    const next=promotions.filter(p=>String(p.id)!==String(id));
+    const {error:saveError}=await sb.storage.from('config').upload('promotions.json',new Blob([JSON.stringify(next,null,2)],{type:'application/json'}),{cacheControl:'0',contentType:'application/json',upsert:true});if(saveError)throw saveError;
+    removed=true;promotions=next;
+    await syncMissionCatalog();
+    await fetchMissionMonth(missionMonth,false);
+    showToast('Promo eliminata. Missioni collegate ritirate; risultati e livelli conservati.','ok');
+  }catch(e){showToast(removed?'Promo eliminata; aggiornamento missioni da verificare. Il server riproverà automaticamente.':String(e.message||e),'bad');}
+  finally{managerBusy=false;renderAll(true);}
+}
+async function loadManagedRewards(){
+  try{
+    const { data, error } = await sb
+      .from("loyalty_rewards")
+      .select("*")
+      .order("sort_order", { ascending:true })
+      .order("created_at", { ascending:false });
+
+    if(error) throw error;
+    managedRewards = data || [];
+  }catch(e){
+    console.error("loadManagedRewards", e);
+    managedRewards = [];
+    lastError = e?.message || String(e);
+  }
+}
+
+async function loadIconFiles(){
+  if(iconPickerLoading) return;
+  iconPickerLoading = true;
+
+  try{
+    iconFiles=await listMediaFiles();
+  }catch(e){
+    console.error("loadIconFiles", e);
+    showToast("❌ Errore caricamento bucket icons", "bad");
+    iconFiles = [];
+  }finally{
+    iconPickerLoading = false;
+  }
+}
+async function openIconPicker(target){
+  iconPickerTarget = target;
+  renderIconPicker();
+
+  if(!iconFiles.length){
+    await loadIconFiles();
+    renderIconPicker();
+  }
+}
+function closeIconPicker(){
+  iconPickerTarget = null;
+  const el = document.getElementById("iconPickerRoot");
+  if(el) el.remove();
+}
+function chooseIconIndex(index){
+  const item = iconFiles[Number(index)];
+  if(!item?.url){
+    showToast("❌ Immagine non valida", "bad");
+    return;
+  }
+
+  chooseIconUrl(item.url);
+}
+function chooseIconUrl(url){
+  const cleanUrl = String(url || "").trim();
+
+  if(!iconPickerTarget || !cleanUrl){
+    showToast("❌ Nessun campo immagine selezionato", "bad");
+    return;
+  }
+
+  const input = document.getElementById(iconPickerTarget);
+  if(input){
+    input.value = cleanUrl;
+    input.setAttribute("value", cleanUrl);
+    input.dispatchEvent(new Event("input", { bubbles:true }));
+    input.dispatchEvent(new Event("change", { bubbles:true }));
+  }
+
+  updateImagePreview(iconPickerTarget, cleanUrl);
+  if(iconPickerTarget === "themeImage") previewTheme();
+  if(iconPickerTarget === "noticeImage") {const box=document.getElementById("noticeImage_preview");if(box)box.innerHTML=`<img class="noticeMediaPreview" src="${escapeHtml(cleanUrl)}" alt="Anteprima avviso">`;}
+  showToast("✅ Immagine selezionata", "ok");
+  closeIconPicker();
+}
+function updateImagePreview(inputId, url){
+  const box = document.getElementById(inputId + "_preview");
+  if(!box) return;
+
+  const cleanUrl = String(url || "").trim();
+
+  if(inputId.startsWith("flavorImage_")){
+    box.innerHTML = cleanUrl
+      ? `<img src="${escapeHtml(cleanUrl)}" crossorigin="anonymous" alt="">`
+      : `<span>🍨</span>`;
+    return;
+  }
+
+  if(inputId === "admPromoImage"){
+    box.innerHTML = cleanUrl
+      ? `<img src="${escapeHtml(cleanUrl)}" crossorigin="anonymous" alt="">`
+      : `<span>🍦</span>`;
+    return;
+  }
+
+  if(cleanUrl){
+    box.innerHTML = `<img src="${escapeHtml(cleanUrl)}" crossorigin="anonymous" alt=""><div class="pickerPreviewText">${escapeHtml(cleanUrl)}</div>`;
+  }else{
+    box.innerHTML = `<div class="pickerPreviewText">Nessuna immagine selezionata</div>`;
+  }
+}
+function clearFlavorImage(inputId){
+  const input = document.getElementById(inputId);
+  if(input){
+    input.value = "";
+    input.setAttribute("value", "");
+  }
+  updateImagePreview(inputId, "");
+}
+function renderIconPicker(){
+  let root = document.getElementById("iconPickerRoot");
+  if(!root){
+    root = document.createElement("div");
+    root.id = "iconPickerRoot";
+    document.body.appendChild(root);
+  }
+
+  const body = iconPickerLoading
+    ? `<div class="adminEmpty">Caricamento immagini dal bucket icons...</div>`
+    : iconFiles.length
+      ? `<div class="pickerGrid">${iconFiles.map((f, index) => `
+          <button type="button" class="pickerItem" onclick="chooseIconIndex(${index})">
+            <img src="${escapeHtml(f.url)}" crossorigin="anonymous" alt="${escapeHtml(f.name)}" loading="lazy">
+            <div class="pickerName">${escapeHtml(f.name)}</div>
+          </button>
+        `).join("")}</div>`
+      : `<div class="adminEmpty">Nessuna immagine trovata nel bucket icons.</div>`;
+
+  root.innerHTML = `<div class="pickerBackdrop" onclick="closeIconPicker()">
+    <div class="pickerModal" onclick="event.stopPropagation()">
+      <div class="pickerHead">
+        <div>
+          <div class="pickerTitle">Scegli immagine</div>
+          <div class="pickerSub">La tua raccolta di immagini</div>
+        </div>
+        <button type="button" class="adminBtn secondary" onclick="closeIconPicker()">Chiudi</button>
+      </div>
+      <div class="pickerBody">${body}</div>
+    </div>
+  </div>`;
+}
+
+async function addManagedReward(){
+  if(managerBusy) return;
+
+  // Come per le promo: leggiamo TUTTI i campi prima del render.
+  const title = readVal("admRewardTitle");
+  const description = readVal("admRewardDesc") || null;
+  const rewardCost = Math.max(0, readNum("admRewardCost", 10));
+  const imageUrl = String(document.getElementById("admRewardImage")?.value || readVal("admRewardImage") || "").trim();
+  const activeFrom = normalizeNullableDate(readVal("admRewardFrom"));
+  const activeTo = normalizeNullableDate(readVal("admRewardTo"));
+  const sortOrder = Math.max(0, readNum("admRewardSort", 0));
+
+  if(!title){
+    showToast("❌ Inserisci il titolo premio", "bad");
+    return;
+  }
+
+  const payload = {
+    title,
+    description,
+    cost: rewardCost,
+    cost_points: rewardCost,
+    image_url: imageUrl || null,
+    active_from: activeFrom,
+    active_to: activeTo,
+    sort_order: sortOrder
+  };
+
+  managerBusy = true;
+  renderAll(true);
+
+  try{
+    const { error } = await sb.from("loyalty_rewards").insert(payload);
+    if(error) throw error;
+
+    await loadManagedRewards();
+    showToast("✅ Premio salvato", "ok");
+  }catch(e){
+    console.error(e);
+    showToast("❌ Errore salvataggio premio: " + String(e?.message || e).slice(0,120), "bad");
+  }finally{
+    managerBusy = false;
+    renderAll(true);
+  }
+}
+async function updateManagedReward(id){
+  if(managerBusy) return;
+
+  managerBusy = true;
+  renderAll(true);
+
+  try{
+    const rewardCost = Math.max(0, readNum(`rewardCost_${id}`, 0));
+    const payload = {
+      cost: rewardCost,
+      cost_points: rewardCost,
+      sort_order: Math.max(0, readNum(`rewardSort_${id}`, 0)),
+      active_from: normalizeNullableDate(readVal(`rewardFrom_${id}`)),
+      active_to: normalizeNullableDate(readVal(`rewardTo_${id}`))
+    };
+
+    const { error } = await sb.from("loyalty_rewards").update(payload).eq("id", id);
+    if(error) throw error;
+
+    await loadManagedRewards();
+    showToast("✅ Premio aggiornato", "ok");
+  }catch(e){
+    console.error(e);
+    showToast("❌ Errore aggiornamento premio", "bad");
+  }finally{
+    managerBusy = false;
+    renderAll(true);
+  }
+}
+async function removeManagedReward(id){
+  if(managerBusy) return;
+  if(!confirm("Eliminare questo premio?")) return;
+
+  managerBusy = true;
+  renderAll(true);
+
+  try{
+    const { error } = await sb.from("loyalty_rewards").delete().eq("id", id);
+    if(error) throw error;
+
+    await loadManagedRewards();
+    showToast("✅ Premio eliminato", "ok");
+  }catch(e){
+    console.error(e);
+    showToast("❌ Errore eliminazione premio", "bad");
+  }finally{
+    managerBusy = false;
+    renderAll(true);
+  }
+}
+function promoActiveMeta(p){
+  const from = p.activeFrom || p.active_from || "";
+  const to = p.activeTo || p.active_to || "";
+  const fmt = v => v ? new Date(v).toLocaleDateString("it-IT",{day:"numeric",month:"short",year:"numeric"}) : "sempre";
+  if(from || to) return `Attiva: ${escapeHtml(fmt(from))} → ${escapeHtml(fmt(to))} · ${Number(p.points||0)} pt`;
+  return `${Number(p.points || 0)} pt • ${Number(p.durationDays || p.days || 0)} giorni`;
+}
+
+const DEFAULT_WEEK_FLAVORS = [
+  { id:"mon", dayKey:1, shortLabel:"Lun", dayLabel:"", name:"Mango", description:"Gusto della settimana", imageUrl:"", tags:["Fruttato","Rinfrescante"], theme:"mango", isClosed:false },
+  { id:"tue", dayKey:2, shortLabel:"Mar", dayLabel:"", name:"Tiramisù", description:"Gusto della settimana", imageUrl:"", tags:["Goloso","Cremoso"], theme:"tiramisu", isClosed:false },
+  { id:"wed", dayKey:3, shortLabel:"Mer", dayLabel:"", name:"Gelateria chiusa", description:"Il mercoledì la gelateria è chiusa.", imageUrl:"", tags:[], theme:"closed", isClosed:true },
+  { id:"thu", dayKey:4, shortLabel:"Gio", dayLabel:"", name:"Arancio rosso", description:"Gusto della settimana", imageUrl:"", tags:["Agrumato","Fruttato"], theme:"blood_orange", isClosed:false },
+  { id:"fri", dayKey:5, shortLabel:"Ven", dayLabel:"", name:"Caffè", description:"Gusto della settimana", imageUrl:"", tags:["Intenso","Aromatico"], theme:"coffee", isClosed:false },
+  { id:"sat", dayKey:6, shortLabel:"Sab", dayLabel:"", name:"Crème caramel", description:"Gusto della settimana", imageUrl:"", tags:["Cremoso","Goloso"], theme:"creme_caramel", isClosed:false },
+  { id:"sun", dayKey:0, shortLabel:"Dom", dayLabel:"", name:"Malaga", description:"Gusto della settimana", imageUrl:"", tags:["Aromatico","Ricco"], theme:"malaga", isClosed:false }
+];
+
+function normalizeFlavorDay(raw, fallback){
+  const isClosed = !!(raw?.isClosed ?? raw?.is_closed ?? fallback.isClosed);
+  const tags = Array.isArray(raw?.tags)
+    ? raw.tags
+    : String(raw?.tags || "")
+      .split(",")
+      .map(t => t.trim())
+      .filter(Boolean);
+
+  return {
+    id: String(raw?.id || fallback.id),
+    dayKey: Number(raw?.dayKey ?? raw?.day_key ?? fallback.dayKey),
+    shortLabel: String(raw?.shortLabel ?? raw?.short_label ?? fallback.shortLabel),
+    dayLabel: String(raw?.dayLabel ?? raw?.day_label ?? fallback.dayLabel ?? ""),
+    name: String(raw?.name || fallback.name),
+    description: String(raw?.description || fallback.description),
+    imageUrl: String(raw?.imageUrl ?? raw?.image_url ?? fallback.imageUrl ?? ""),
+    tags,
+    theme: String(raw?.theme || (isClosed ? "closed" : fallback.theme)),
+    isClosed
+  };
+}
+function normalizeFlavorsPayload(raw){
+  const arr = Array.isArray(raw) ? raw : (Array.isArray(raw?.days) ? raw.days : []);
+  if(!arr.length) return DEFAULT_WEEK_FLAVORS;
+
+  return DEFAULT_WEEK_FLAVORS.map(fallback => {
+    const found = arr.find(x => Number(x?.dayKey ?? x?.day_key) === fallback.dayKey) || arr.find(x => String(x?.id || "") === fallback.id);
+    return normalizeFlavorDay(found || fallback, fallback);
+  });
+}
+async function loadFlavorPresets(){
+  flavorPresetError='';
+  try{const {data,error}=await sb.rpc('staff_flavor_presets');if(error)throw error;if(!Array.isArray(data))throw new Error('Risposta modelli non valida.');flavorPresets=data;}
+  catch(e){flavorPresetError='Modelli del calendario non disponibili: '+String(e.message||e)+'. Il calendario pubblicato resta utilizzabile.';}
+}
+function flavorPresetOptions(){return '<option value="">Nuovo modello / scegli…</option>'+flavorPresets.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.content.name)}</option>`).join('');}
+function fillFlavorPreset(dayId,modelId){
+  const model=flavorPresets.find(p=>p.id===modelId);if(!model)return;
+  const c=model.content;
+  for(const [field,key]of [['Name','name'],['Desc','description'],['Image','imageUrl'],['Theme','theme']]){const input=document.getElementById('flavor'+field+'_'+dayId);if(input)input.value=c[key]||'';}
+  document.getElementById('flavorTags_'+dayId).value=(c.tags||[]).join(', ');
+  document.getElementById('flavorClosed_'+dayId).checked=!!c.isClosed;
+  document.getElementById('flavorClosedSelect_'+dayId).value=c.isClosed?'1':'0';
+  updateImagePreview('flavorImage_'+dayId,c.imageUrl||'');
+  showToast('Modello richiamato. Premi Salva calendario per pubblicare le modifiche.','ok');
+}
+async function saveFlavorPreset(dayId){
+  if(flavorBusy||!staffVerified)return;
+  const content={name:readVal('flavorName_'+dayId),description:readVal('flavorDesc_'+dayId),imageUrl:readVal('flavorImage_'+dayId),theme:readVal('flavorTheme_'+dayId),tags:readVal('flavorTags_'+dayId).split(',').map(t=>t.trim()).filter(Boolean),isClosed:!!document.getElementById('flavorClosed_'+dayId)?.checked};
+  if(!content.name||!content.description){showToast('Completa nome e descrizione prima di salvare il modello.','bad');return;}
+  const select=document.getElementById('flavorPreset_'+dayId),existing=flavorPresets.find(p=>p.id===select?.value),id=existing?.id||makeId('flavor');
+  flavorBusy=true;const button=document.getElementById('flavorSavePreset_'+dayId);if(button)button.disabled=true;
+  try{const {data,error}=await sb.rpc('staff_save_flavor_preset',{p_id:id,p_content:content});if(error)throw error;flavorPresets=data;flavorPresetError='';for(const day of DEFAULT_WEEK_FLAVORS){const el=document.getElementById('flavorPreset_'+day.id);if(el){const selected=el.value;el.innerHTML=flavorPresetOptions();el.value=day.id===dayId?id:selected;}}showToast('Modello salvato sul server. Il calendario nell’app non è stato cambiato.','ok');}
+  catch(e){showToast('Modello non salvato: '+String(e.message||e),'bad');}
+  finally{flavorBusy=false;if(button)button.disabled=false;}
+}
+
+async function loadManagedFlavors(){
+  await loadFlavorPresets();
+  try{
+    const res = await fetch("https://cbgwfngseoppybsbbwwo.supabase.co/storage/v1/object/public/config/flavors-week.json?t=" + Date.now(), { cache:"no-store" });
+
+    if(!res.ok){
+      managedFlavors = DEFAULT_WEEK_FLAVORS;
+      return;
+    }
+
+    const json = await res.json();
+    managedFlavors = normalizeFlavorsPayload(json);
+  }catch(e){
+    console.warn("loadManagedFlavors", e);
+    managedFlavors = DEFAULT_WEEK_FLAVORS;
+  }
+}
+async function saveManagedFlavors(){
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    days: managedFlavors
+  };
+
+  const file = new Blob([JSON.stringify(payload, null, 2)], { type:"application/json" });
+
+  const { error } = await sb.storage
+    .from("config")
+    .upload("flavors-week.json", file, {
+      cacheControl:"0",
+      contentType:"application/json",
+      upsert:true
+    });
+
+  if(error) throw error;
+}
+function collectFlavorForm(){
+  return DEFAULT_WEEK_FLAVORS.map(fallback => {
+    const id = fallback.id;
+    const closed = !!document.getElementById(`flavorClosed_${id}`)?.checked;
+    const tagsRaw = readVal(`flavorTags_${id}`);
+    const imageUrl = String(document.getElementById(`flavorImage_${id}`)?.value || "").trim();
+
+    return {
+      id,
+      dayKey: fallback.dayKey,
+      shortLabel: fallback.shortLabel,
+      dayLabel: readVal(`flavorDayLabel_${id}`),
+      isClosed: closed,
+      name: readVal(`flavorName_${id}`) || fallback.name,
+      description: readVal(`flavorDesc_${id}`) || fallback.description,
+      imageUrl,
+      image_url: imageUrl || null,
+      tags: tagsRaw ? tagsRaw.split(",").map(t => t.trim()).filter(Boolean) : [],
+      theme: closed ? "closed" : (readVal(`flavorTheme_${id}`) || fallback.theme)
+    };
+  });
+}
+async function saveFlavorCalendar(){
+  if(flavorBusy) return;
+
+  flavorBusy = true;
+
+  try{
+    managedFlavors = collectFlavorForm();
+    await saveManagedFlavors();
+    await loadManagedFlavors();
+    showToast("✅ Calendario gusti salvato", "ok");
+  }catch(e){
+    console.error(e);
+    showToast("❌ Errore salvataggio calendario: " + String(e?.message || e).slice(0,120), "bad");
+  }finally{
+    flavorBusy = false;
+    renderAll(true);
+  }
+}
+function resetFlavorCalendarToDefault(){
+  if(!confirm("Vuoi ripristinare il calendario di esempio?")) return;
+  managedFlavors = DEFAULT_WEEK_FLAVORS;
+  renderAll(true);
+}
+function renderThemeOptions(selected){
+  const options = [
+    ["mango","Mango/arancio"],
+    ["tiramisu","Tiramisù"],
+    ["blood_orange","Agrumato rosso"],
+    ["coffee","Caffè"],
+    ["creme_caramel","Crema/caramello"],
+    ["malaga","Viola/malaga"],
+    ["coconut","Cocco/azzurro"],
+    ["closed","Chiusura"]
+  ];
+
+  return options.map(([value,label]) => `<option value="${value}" ${selected===value?"selected":""}>${label}</option>`).join("");
+}
+function renderFlavorDayCard(day){
+  const safeId = escapeHtml(day.id);
+  const img = day.imageUrl
+    ? `<img src="${escapeHtml(day.imageUrl)}" crossorigin="anonymous" alt="">`
+    : `<span>🍨</span>`;
+
+  return `<div class="flavorMobileCard">
+    <div class="flavorMobileHead">
+      <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+        <div class="flavorDayBadge">${escapeHtml(day.shortLabel)}</div>
+        <div style="min-width:0;">
+          <div class="flavorMobileTitle">${escapeHtml(day.name || "Gusto")}</div>
+          <div class="flavorMobileSub">${day.isClosed ? "Giorno chiuso" : "Gusto del giorno"}</div>
+        </div>
+      </div>
+
+      <select class="adminSelect" style="width:105px; padding:10px;" id="flavorClosedSelect_${safeId}" onchange="document.getElementById('flavorClosed_${safeId}').checked = this.value === '1'">
+        <option value="0" ${day.isClosed ? "" : "selected"}>Aperto</option>
+        <option value="1" ${day.isClosed ? "selected" : ""}>Chiuso</option>
+      </select>
+      <input type="checkbox" id="flavorClosed_${safeId}" ${day.isClosed ? "checked" : ""} style="display:none">
+    </div>
+
+    <div class="formGrid">
+      <label><span class="fieldLabel">Modelli salvati</span><select class="adminSelect" id="flavorPreset_${safeId}" ${flavorBusy?'disabled':''} onchange="fillFlavorPreset('${safeId}',this.value)">${flavorPresetOptions()}</select></label>
+      <label>
+        <span class="fieldLabel">Nome gusto</span>
+        <input class="adminInput" id="flavorName_${safeId}" value="${escapeHtml(day.name)}" placeholder="Es. Tiramisù">
+      </label>
+
+      <label>
+        <span class="fieldLabel">Descrizione</span>
+        <textarea class="adminTextarea" id="flavorDesc_${safeId}" placeholder="Descrizione gusto">${escapeHtml(day.description)}</textarea>
+      </label>
+
+      <div>
+        <span class="fieldLabel">Immagine</span>
+        <div class="flavorImageBox">
+          <div class="flavorImagePreview" id="flavorImage_${safeId}_preview">${img}</div>
+          <div style="display:grid; gap:8px;">
+            <button type="button" class="adminBtn secondary" onclick="openIconPicker('flavorImage_${safeId}')">Scegli immagine</button>
+            <button type="button" class="adminBtn danger" onclick="clearFlavorImage('flavorImage_${safeId}')">Rimuovi immagine</button>
+          </div>
+        </div>
+        <input class="flavorHiddenInput" id="flavorImage_${safeId}" value="${escapeHtml(day.imageUrl || "")}">
+      </div>
+
+      <label>
+        <span class="fieldLabel">Tema colore</span>
+        <select class="adminSelect" id="flavorTheme_${safeId}">${renderThemeOptions(day.theme)}</select>
+      </label>
+
+      <button type="button" class="adminBtn secondary" id="flavorSavePreset_${safeId}" ${flavorBusy||flavorPresetError?'disabled':''} onclick="saveFlavorPreset('${safeId}')">Salva come modello</button>
+      <p class="adminHint">Salva soltanto questo gusto. Puoi richiamarlo in qualsiasi giorno; un modello selezionato viene aggiornato con lo stesso pulsante.</p>
+      <input type="hidden" id="flavorTags_${safeId}" value="${escapeHtml((day.tags || []).join(", "))}">
+      <input type="hidden" id="flavorDayLabel_${safeId}" value="${escapeHtml(day.dayLabel || "")}">
+    </div>
+  </div>`;
+}
+
+function renderManageNews(){
+  const days = normalizeFlavorsPayload({ days: managedFlavors.length ? managedFlavors : DEFAULT_WEEK_FLAVORS });
+
+  return `<div class="container">
+    <div class="adminPanel flavorAdminIntro" style="margin-bottom:14px;">
+      <div>
+        <div class="adminPanelTitle">Calendario gusti</div>
+        <div class="adminHint" style="margin-bottom:0;">
+          Modifica i gusti della settimana e premi Salva calendario per aggiornare l’app.
+        </div>
+      </div>
+
+      <div class="flavorAdminActions">
+        <button class="adminBtn" ${flavorBusy ? "disabled" : ""} onclick="saveFlavorCalendar()">${flavorBusy ? "Salvo..." : "Salva calendario"}</button>
+        <button class="adminBtn secondary" ${flavorBusy ? "disabled" : ""} onclick="loadManagedFlavors().then(()=>renderAll(true))">Ricarica</button>
+
+      </div>
+    </div>
+
+    ${flavorPresetError?`<div class="statusNote" role="status">${escapeHtml(flavorPresetError)}</div>`:''}
+    <div class="flavorMobileStack">
+      ${days.map(renderFlavorDayCard).join("")}
+    </div>
+  </div>`;
+}
+
+function renderManagePromos(){
+  const disabled = managerBusy ? "disabled" : "";
+  const list = (promotions || []).map((p, promoIndex) => {
+    const promoImg = getPromoImageUrl(p);
+    const img = promoImg
+      ? `<img src="${escapeHtml(promoImg)}" crossorigin="anonymous" alt="" onerror="this.style.display='none'; this.parentElement.innerHTML='<span>🍦</span>';">`
+      : `<span>${escapeHtml(p.icon || "🍦")}</span>`;
+    const promoBadge = getPromoBadgeForView(p);
+    const badge = promoBadge ? `<div class="promoBadgeMini">${escapeHtml(promoBadge)}</div>` : "";
+    return `<div class="promoListCard">
+      <div class="promoListThumb">${img}</div>
+      <div style="min-width:0;">
+        <div class="adminItemTitle">${escapeHtml(p.title || "Promo")}</div>
+        <div class="adminItemMeta">${promoActiveMeta(p)}<br>${escapeHtml((p.desc || p.description || "").slice(0,140))}</div>
+        ${badge}
+      </div>
+      ${missionLinkControls('promoMission'+promoIndex,false,p)}
+      <div class="promoActionsMobile">
+        <button class="adminBtn danger" ${disabled} onclick="removeManagedPromo('${escapeHtml(p.id)}')">Elimina promo</button>
+      </div>
+    </div>`;
+  }).join("") || `<div class="adminEmpty">Nessuna promo nel file promotions.json.</div>`;
+
+  return `<div class="container">
+    <div class="adminPanel flavorAdminIntro" style="margin-bottom:14px;">
+      <div>
+        <div class="adminPanelTitle">Gestione promozioni</div>
+        <div class="adminHint" style="margin-bottom:0;">
+          Scegli un modello o crea una promozione. Le foto arrivano dalla tua raccolta di immagini.
+        </div>
+      </div>
+    </div>
+
+    ${feedbackMarkup()}
+    <div class="promoMobileStack">
+      <div class="promoMobileCard">
+        <div class="promoMobileHead">
+          <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+            <div class="promoDayBadge">NEW</div>
+            <div style="min-width:0;">
+              <div class="promoMobileTitle">Nuova promo</div>
+              <div class="promoMobileSub">Titolo, testo, periodo e immagine</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="formGrid">
+          <label><span class="fieldLabel">Scegli una promozione preimpostata</span><select class="adminSelect" id="admPromoPreset" onchange="fillPromoPreset(this.value)">${presetOptions()}</select></label>
+          <div class="formSummary">Scegli un modello, imposta il periodo e pubblica. Puoi attivare più promozioni, una dopo l’altra. I modelli salvati restano disponibili anche quando elimini una promo pubblicata.</div>
+          <label>
+            <span class="fieldLabel">Titolo</span>
+            <input class="adminInput" id="admPromoTitle" placeholder="Es. Crêpe speciale">
+          </label>
+
+          <label>
+            <span class="fieldLabel">Descrizione</span>
+            <textarea class="adminTextarea" id="admPromoDesc" placeholder="Testo della promozione"></textarea>
+          </label>
+
+          <label><span class="fieldLabel">Prezzo / sconto di riferimento (facoltativo)</span><input class="adminInput" id="admPromoPrice" maxlength="80" placeholder="Es. sconto 0,50 €"><small class="adminHint">Promemoria per lo staff. Per mostrarlo ai clienti includilo nella descrizione.</small></label>
+          <div class="formRow2">
+            <label>
+              <span class="fieldLabel">Punti assegnati</span>
+              <input class="adminInput" id="admPromoPoints" type="number" min="0" value="1">
+            </label>
+            <label>
+              <span class="fieldLabel">Durata giorni</span>
+              <input class="adminInput" id="admPromoDays" type="number" min="1" value="3">
+            </label>
+          </div>
+
+          <div class="formRow2">
+            <label>
+              <span class="fieldLabel">Dal</span>
+              <input class="adminInput" id="admPromoFrom" type="date">
+            </label>
+            <label>
+              <span class="fieldLabel">Scadenza (scompare dall’inizio di questo giorno)</span>
+              <input class="adminInput" id="admPromoTo" type="date">
+            </label>
+          </div>
+
+          <div>
+            <span class="fieldLabel">Immagine</span>
+            <div class="promoImageBox">
+              <div class="promoImagePreview" id="admPromoImage_preview"><span>🍦</span></div>
+              <div style="display:grid; gap:8px;">
+                <button type="button" class="adminBtn secondary" onclick="openIconPicker('admPromoImage')">Scegli immagine</button>
+                <button type="button" class="adminBtn danger" onclick="clearFlavorImage('admPromoImage')">Rimuovi immagine</button>
+              </div>
+            </div>
+            <input class="promoHiddenInput" id="admPromoImage" value="">
+          </div>
+
+          <label>
+            <span class="fieldLabel">Badge opzionale</span>
+            <select class="adminSelect" id="admPromoBadge">
+              <option value="">Nessun badge</option>
+              ${PROMO_BADGES.map(([key,label])=>`<option value="${key}">${escapeHtml(label)}</option>`).join('')}
+            </select>
+          </label>
+
+          <label><span class="fieldLabel">Risparmio per riscatto (€)</span><input class="adminInput" id="admPromoSavings" type="number" min="0" max="1000" step="0.01" value="0"><small class="adminHint">Importo effettivamente risparmiato, conteggiato dopo la convalida. Non è il prezzo del prodotto. La contabilizzazione sarà attivata al rilascio.</small></label>
+          ${missionLinkControls('promoMissionNew',true)}
+          ${pushOptionsMarkup('promo')}
+          <label class="checkLine"><input type="checkbox" id="admPromoPush">Invia una notifica quando pubblico</label>
+          <div class="statusNote">${escapeHtml(pushStatus.message)}</div>
+          <div class="buttonRow"><button class="adminBtn" ${disabled} onclick="addManagedPromo()">${managerBusy ? "Salvo..." : "Pubblica promozione"}</button><button class="adminBtn secondary" ${disabled} onclick="savePromoPreset()">Salva come modello</button></div>
+        </div>
+      </div>
+
+      <div class="promoMobileCard">
+        <div class="promoMobileHead">
+          <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+            <div class="promoDayBadge">LIST</div>
+            <div style="min-width:0;">
+              <div class="promoMobileTitle">Promo pubblicate</div>
+              <div class="promoMobileSub">${(promotions || []).length} promozioni pubblicate</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="adminList">${list}</div>
+      </div>
+    </div>
+    ${pendingPushMarkup()}
+  </div>`;
+}
+function renderManageRewards(){
+  const disabled = managerBusy ? "disabled" : "";
+  const list = (managedRewards || []).map(r => {
+    const id = String(r.id);
+    const img = r.image_url ? `<img src="${escapeHtml(r.image_url)}" crossorigin="anonymous" alt="">` : `<span>🎁</span>`;
+    return `<div class="adminItem">
+      <div class="adminThumb">${img}</div>
+      <div>
+        <div class="adminItemTitle">${escapeHtml(r.title || "Premio")}</div>
+        <div class="adminItemMeta">${escapeHtml(r.description || "Nessuna descrizione")}<br>${getRewardCostValue(r)} pt • ordine ${Number(r.sort_order || 0)} • ${escapeHtml(r.active_from || "sempre")} → ${escapeHtml(r.active_to || "sempre")}</div>
+        <div class="inlineEdit">
+          <input class="adminInput" id="rewardCost_${escapeHtml(id)}" type="number" min="0" value="${getRewardCostValue(r)}" placeholder="Costo">
+          <input class="adminInput" id="rewardSort_${escapeHtml(id)}" type="number" min="0" value="${Number(r.sort_order || 0)}" placeholder="Ordine">
+          <input class="adminInput" id="rewardFrom_${escapeHtml(id)}" type="date" value="${escapeHtml(r.active_from || "")}">
+          <input class="adminInput" id="rewardTo_${escapeHtml(id)}" type="date" value="${escapeHtml(r.active_to || "")}">
+        </div>
+      </div>
+      <div class="adminActions">
+        <button class="adminBtn secondary" ${disabled} onclick="updateManagedReward('${escapeHtml(id)}')">Salva</button>
+        <button class="adminBtn danger" ${disabled} onclick="removeManagedReward('${escapeHtml(id)}')">Elimina</button>
+      </div>
+    </div>`;
+  }).join("") || `<div class="adminEmpty">Nessun premio in loyalty_rewards.</div>`;
+
+  return `<div class="container">
+    <div class="adminGrid">
+      <div class="adminPanel">
+        <div class="adminPanelTitle">Nuovo premio</div>
+        <div class="adminHint">Salva nella tabella <b>loyalty_rewards</b>. L'app profilo mostrerà i premi attivi.</div>
+        <div class="formGrid">
+          <label><span class="fieldLabel">Titolo</span><input class="adminInput" id="admRewardTitle" placeholder="Es. Vaschetta omaggio"></label>
+          <label><span class="fieldLabel">Descrizione</span><textarea class="adminTextarea" id="admRewardDesc" placeholder="Descrizione premio"></textarea></label>
+          <div class="formRow2">
+            <label><span class="fieldLabel">Costo punti</span><input class="adminInput" id="admRewardCost" type="number" min="0" value="10"></label>
+            <label><span class="fieldLabel">Ordine</span><input class="adminInput" id="admRewardSort" type="number" min="0" value="0"></label>
+          </div>
+          <div class="formRow2">
+            <label><span class="fieldLabel">Dal</span><input class="adminInput" id="admRewardFrom" type="date"></label>
+            <label><span class="fieldLabel">Al</span><input class="adminInput" id="admRewardTo" type="date"></label>
+          </div>
+          <label>
+            <span class="fieldLabel">Immagine</span>
+            <div class="formRow2">
+              <input class="adminInput" id="admRewardImage" placeholder="URL immagine dal bucket icons" oninput="updateImagePreview('admRewardImage', this.value)">
+              <button type="button" class="adminBtn secondary" onclick="openIconPicker('admRewardImage')">Scegli immagine</button>
+            </div>
+            <div class="pickerPreview" id="admRewardImage_preview"><div class="pickerPreviewText">Nessuna immagine selezionata</div></div>
+          </label>
+          <button class="adminBtn" ${disabled} onclick="addManagedReward()">${managerBusy ? "Salvo..." : "+ Aggiungi premio"}</button>
+        </div>
+      </div>
+      <div class="adminPanel">
+        <div class="adminPanelTitle">Premi pubblicati</div>
+        <div class="adminHint">${(managedRewards || []).length} premi caricati dalla tabella.</div>
+        <div class="adminList">${list}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+
+function getPromoTitle(id){
+  const p = promotions.find(x=>x.id===id);
+  return p ? p.title : id;
+}
+
+function formatTime(ts){
+  return new Date(ts).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"});
+}
+
+function todayCount(data){
+  const today = new Date().toDateString();
+  return data.filter(x=>new Date(x.created_at).toDateString()===today).length;
+}
+
+function showToast(message, kind="info"){
+  const el = document.getElementById("toast");
+  if(!el) return;
+  el.textContent = message;
+  el.style.borderColor = (kind==="ok") ? "rgba(34,197,94,0.55)" : (kind==="bad") ? "rgba(239,68,68,0.55)" : "rgba(148,163,184,0.35)";
+  el.classList.add("show");
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(()=>{ el.classList.remove("show"); }, 1800);
+}
+function minutesAgo(ts){
+  const ms = Date.now() - new Date(ts).getTime();
+  return Math.max(0, Math.floor(ms/60000));
+}
+
+function isRewardPendingStatus(s){
+  if(!s) return false;
+  const v = String(s).toLowerCase();
+  return v === "waiting" || v === "pending" || v === "requested";
+}
+function formatDateTime(ts){
+  if(!ts) return "";
+  return new Date(ts).toLocaleString("it-IT",{hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"});
+}
+
+function dateKeyLocal(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const day = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function startOfTodayLocalISO(){
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0,0);
+  return start.toISOString();
+}
+function startOfNDaysAgoLocalISO(daysAgo){
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0,0);
+  start.setDate(start.getDate() - daysAgo);
+  return start.toISOString();
+}
+
+
+function renderLogin(){
+  document.getElementById("app").innerHTML=`
+  <div class="login">
+    <h2>Kiosk</h2><p>Convalide e gestione della gelateria</p>
+    <input id="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
+    <button class="loginBtn" onclick="login()">Accedi</button>
+  </div>`;
+}
+
+async function login(){
+  const email=document.getElementById("email").value;
+  const password=document.getElementById("password").value;
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  if(error){ alert("Login fallito"); return;}
+  checkStaff();
+}
+
+async function checkStaff(){
+  const {data:user}=await sb.auth.getUser();
+  if(!user?.user?.email) return renderLogin();
+
+  const {data}=await sb
+    .from("staff_emails")
+    .select("*")
+    .eq("email",user.user.email)
+    .single();
+
+  if(!data){
+    alert("Non autorizzato");
+    await sb.auth.signOut();
+    renderLogin();
+  }else{
+    staffVerified = true;
+    await loadExperience();
+    startDashboard();
+  }
+}
+
+async function startDashboard(){
+  initKeyboardOnce();
+
+  // Render immediato: così Safari non resta mai su sfondo vuoto se una fetch iniziale fallisce.
+  renderAll(true);
+
+  try{
+    await loadPromotions();
+  }catch(e){
+    console.error("loadPromotions startup error", e);
+    lastError = e?.message || String(e);
+    promotions = [];
+  }
+
+  try{
+    await loadManagedRewards();
+  }catch(e){
+    console.error("loadManagedRewards startup error", e);
+    managedRewards = [];
+  }
+
+  renderAll(true);
+  setInterval(()=>{ loadRedemptions(); loadRewards(); },2000);
+  setInterval(()=>{ loadActivityStats(false); },30000);
+  loadRedemptions();
+  loadRewards();
+  loadActivityStats(true);
+  if(activeTab === "users") loadUsers(true);
+  if(activeTab === "images") void refreshMedia();
+  if(activeTab === "missions") void loadMissionMonth(missionMonth,true);
+  if(activeTab === "managePromos"){await fetchMissionMonth(missionMonth,true).catch(e=>{missionError=e.message;});renderAll(true);}
+}
+
+async function loadRedemptions(){
+  try{
+    const {data, error} = await sb
+      .from("redemptions")
+      .select("*")
+      .eq("status","waiting")
+      .order("created_at",{ascending:true});
+
+    if(error) throw error;
+
+    online = true;
+    lastError = "";
+
+    const rows = data || [];
+
+    // Auto-expire: waiting older than 5 minutes -> mark expired
+    const now = Date.now();
+    const toExpire = rows.filter(r => (now - new Date(r.created_at).getTime()) > 5*60*1000).map(r => r.id);
+    if(toExpire.length){
+      // avoid double-submission in the same tick
+      const expireIds = toExpire.filter(id => !pendingPromoIds.has(id));
+      if(expireIds.length){
+        expireIds.forEach(id => pendingPromoIds.add(id));
+        const { error: expErr } = await sb.from("redemptions").update({status:"expired"}).in("id", expireIds);
+        expireIds.forEach(id => pendingPromoIds.delete(id));
+        if(expErr){
+          console.error(expErr);
+          lastError = expErr.message || String(expErr);
+        }else{
+          // notify clients so they can close pending UI
+          for(const rid of expireIds){ await sendRedemptionUpdate(rid, "expired"); }
+        }
+      }
+    }
+
+    // filter out those we just expired (they'll disappear next poll anyway)
+    const visible = rows.filter(r => !toExpire.includes(r.id));
+    promoRows = visible;
+    const topId = promoRows && promoRows[0] ? promoRows[0].id : null;
+    if(topId && topId !== lastTopPromoId){
+      lastTopPromoId = topId;
+      handleNewTop("promo");
+    }
+    if(!navMode && activeTab === "promo"){ armAutoSelect("promo"); }
+    safeRenderAll();
+  }catch(e){
+    online = false;
+    lastError = e?.message ? e.message : String(e);
+    console.error(e);
+    promoRows = [];
+    safeRenderAll(); // still render header/status, but not management forms
+  }
+}
+
+
+async function loadRewards(){
+  try{
+    const { data, error } = await sb
+      .from("loyalty_reward_redemptions")
+      .select("*")
+      .order("created_at",{ascending:true})
+      .limit(200);
+
+    if(error) throw error;
+
+    online = true;
+    lastError = "";
+
+    const rows = (data || []).filter(r => isRewardPendingStatus(r.status));
+
+    const now = Date.now();
+    const expired = rows.filter(r => r.expire_at && (new Date(r.expire_at).getTime() < now)).map(r => r.id);
+    if(expired.length){
+      const ids = expired.filter(id => !pendingRewardIds.has(id));
+      if(ids.length){
+        ids.forEach(id => pendingRewardIds.add(id));
+        const { error: expErr } = await sb.from("loyalty_reward_redemptions")
+          .update({status:"rejected"})
+          .in("id", ids);
+        ids.forEach(id => pendingRewardIds.delete(id));
+        if(expErr){
+          console.error(expErr);
+          lastError = expErr.message || String(expErr);
+        }else{
+          // notify clients so they can close pending UI
+          for(const rid of expireIds){ await sendRedemptionUpdate(rid, "expired"); }
+        }
+      }
+    }
+
+    rewardRows = rows.filter(r => !expired.includes(r.id));
+    const topIdR = rewardRows && rewardRows[0] ? rewardRows[0].id : null;
+    if(topIdR && topIdR !== lastTopRewardId){
+      lastTopRewardId = topIdR;
+      handleNewTop("rewards");
+    }
+    if(!navMode && activeTab === "rewards"){ armAutoSelect("rewards"); }
+    safeRenderAll();
+  }catch(e){
+    online = false;
+    lastError = e?.message ? e.message : String(e);
+    console.error(e);
+    rewardRows = [];
+    safeRenderAll();
+  }
+}
+
+async function approveReward(id, title=""){
+  if(pendingRewardIds.has(id)) return;
+  pendingRewardIds.add(id);
+  renderAll();
+  try{
+    const { error } = await sb.from("loyalty_reward_redemptions")
+      .update({status:"approved", approved_at: new Date().toISOString()})
+      .eq("id", id);
+    if(error) throw error;
+    showToast("✅ Premio approvato: " + (title || id), "ok");
+  }catch(e){
+    console.error(e);
+    showToast("❌ Errore approvazione premio", "bad");
+  }finally{
+    pendingRewardIds.delete(id);
+    loadRewards();
+  }
+}
+
+async function rejectReward(id, title=""){
+  if(pendingRewardIds.has(id)) return;
+  pendingRewardIds.add(id);
+  renderAll();
+  try{
+    const { error } = await sb.from("loyalty_reward_redemptions")
+      .update({status:"rejected"})
+      .eq("id", id);
+    if(error) throw error;
+    showToast("❌ Premio rifiutato: " + (title || id), "bad");
+  }catch(e){
+    console.error(e);
+    showToast("❌ Errore rifiuto premio", "bad");
+  }finally{
+    pendingRewardIds.delete(id);
+    loadRewards();
+  }
+}
+
+function setTab(tab){
+  rememberMissionDraft();
+  if(tab==='missions'){activeTab=tab;localStorage.setItem('kiosk_tab',tab);void loadMissionMonth(missionMonth,true);return;}
+  if(tab==='images'){activeTab=tab;localStorage.setItem('kiosk_tab',tab);renderAll(true);void refreshMedia();return;}
+  actionFeedback = "";
+  activeTab = tab;
+  localStorage.setItem("kiosk_tab", tab);
+
+  if(tab === "notices" || tab === "appearance"){
+    loadExperience().then(()=>renderAll(true));
+    return;
+  }
+
+  if(tab === "users"){
+    loadUsers(true);
+    return;
+  }
+
+  if(tab === "manageRewards"){
+    loadManagedRewards().then(()=>renderAll(true));
+    return;
+  }
+
+  if(tab === "managePromos"){
+    Promise.all([loadPromotions(),loadExperience()]).then(()=>fetchMissionMonth(missionMonth,true)).then(()=>renderAll(true)).catch(e=>{missionError=e.message;renderAll(true);showToast(e.message,"bad");});
+    return;
+  }
+
+  if(tab === "manageNews"){
+    loadManagedFlavors().then(()=>renderAll(true));
+    return;
+  }
+
+  renderAll(true);
+}
+
+function renderAll(force=false){
+  // Nelle pagine di gestione NON facciamo re-render automatico:
+  // altrimenti su mobile chiude la tastiera e cancella i campi.
+  // Si aggiorna quando cambi scheda o dopo salvataggio/eliminazione.
+  if(activeTab === "users" && !force) return;
+  if(isManagementTab() && !force) return;
+  if(isUsersSearchFocused() && !force) return;
+  if(isFormControlFocused() && !force) return;
+
+  renderDashboard(promoRows);
+}
+
+function renderDashboard(data){
+  const waitingCount = (promoRows || []).length;
+  const rewardWaiting = (rewardRows || []).length;
+  const kbdHint = (!navMode && ((activeTab==="promo" && waitingCount>0) || (activeTab==="rewards" && rewardWaiting>0))) ? `<div class="kbdHint"><b>INVIO</b> = CONVALIDA • <b>BACK/0</b> = ANNULLA • <b>8/2</b> su/giù • <b>4</b> Promo • <b>6</b> Premi</div>` : "";
+  const statusLabel = online ? "Online" : "Offline";
+  const dotClass = online ? "dot" : "dot off";
+  const statusBadgeClass = online ? "badge onlinePulse" : "badge";
+  const errText = (!online && lastError) ? `<div class="small">Errore: ${escapeHtml(String(lastError).slice(0,120))}</div>` : "";
+  const managementSections = [
+    ["users", "Utenti"],
+    ["managePromos", "Promozioni"],
+    ["manageRewards", "Premi"],
+    ["manageNews", "Novità / calendario gusti"],
+    ["notices", "Avvisi"],
+    ["appearance", "Aspetto app"],
+    ["images", "Immagini"],
+    ["missions", "Missioni mensili"]
+  ];
+  const managementActive = managementSections.some(([tab]) => tab === activeTab);
+  const tabs = `<div class="tabs">
+    <button type="button" class="tab ${activeTab==="promo"?"active":""}" onclick="setTab('promo')">Promo <span class="countpill">${waitingCount}</span></button>
+    <button type="button" class="tab ${activeTab==="rewards"?"active":""}" onclick="setTab('rewards')">Premi <span class="countpill">${rewardWaiting}</span></button>
+    <label class="managementMenu ${managementActive?"active":""}">
+      <span>Gestione</span>
+      <select id="managementMenu" aria-label="Gestione" onchange="if(this.value) setTab(this.value)">
+        <option value="" ${managementActive?"":"selected"} disabled>Scegli sezione…</option>
+        ${managementSections.map(([tab,label]) => `<option value="${tab}" ${activeTab===tab?"selected":""}>${label}</option>`).join("")}
+      </select>
+    </label>
+  </div>`;
+
+  const promoList = `<div class="container">${(promoRows||[]).map((r,i)=>{ const mins=minutesAgo(r.created_at); const age=mins===0?"adesso":(mins===1?"1 min":(mins+" min")); const disabled=pendingPromoIds.has(r.id)?"disabled":""; const title=escapeHtml(getPromoTitle(r.promo_id)||r.promo_id||""); const email=escapeHtml(r.user_email||r.client_ref||"OSPITE"); return `<div class="card waiting ${isCardSelected("promo",i)?"selected":""}" onclick="selectCard('promo', ${i})"><div class="promo">${title}</div><div class="user">${email}</div><div class="time">${formatTime(r.created_at)} • in attesa da ${age}</div><div class="buttons"><button class="approve" ${disabled} onclick="event.stopPropagation(); approve('${r.id}','${title}')">CONVALIDA</button><button class="cancel" ${disabled} onclick="event.stopPropagation(); cancel('${r.id}','${title}')">ANNULLA</button></div></div>`; }).join("") || `<div class="emptyBox">Nessuna richiesta promo in attesa.</div>`}</div>`;
+
+  const rewardsList = `<div class="container">${(rewardRows||[]).map((r,i)=>{ const mins=minutesAgo(r.created_at); const age=mins===0?"adesso":(mins===1?"1 min":(mins+" min")); const disabled=pendingRewardIds.has(r.id)?"disabled":""; const title=escapeHtml(r.reward_title||r.reward_id||"Premio"); const exp=r.expire_at?` • scade: ${formatTime(r.expire_at)}`:""; const who=escapeHtml(r.user_email||r.client_ref||"OSPITE"); return `<div class="card waiting ${isCardSelected("rewards",i)?"selected":""}" onclick="selectCard('rewards', ${i})"><div class="promo">${title}</div><div class="user">${who}</div><div class="time">${formatTime(r.created_at)} • in attesa da ${age}${exp}</div><div class="small">Costo: <b>${escapeHtml(r.cost_points ?? r.cost ?? "-")}</b> punti • Codice: <b>${escapeHtml(r.code||"-")}</b></div><div class="buttons"><button class="approve" ${disabled} onclick="event.stopPropagation(); approveReward('${r.id}','${title}')">CONVALIDA PREMIO</button><button class="cancel" ${disabled} onclick="event.stopPropagation(); rejectReward('${r.id}','${title}')">RIFIUTA</button></div></div>`; }).join("") || `<div class="emptyBox">Nessun premio tessera in attesa.</div>`}</div>`;
+
+  const usersList = `<div class="container"><div class="card"><div class="promo">Utenti registrati</div><div class="usageLead">Totale registrati: <b>${usersRows.length}</b> • Ricerca locale, niente refresh automatico.</div><div class="usersToolbar"><input class="searchInput" id="usersSearchInput" placeholder="Cerca email..." autocomplete="off" autocapitalize="none" spellcheck="false" value="${escapeHtml(usersSearch)}" oninput="onUserSearch(this.value)"><button type="button" class="refreshBtn" ${usersLoading?"disabled":""} onclick="event.preventDefault(); loadUsers(true)">${usersLoading?"Aggiorno...":"Aggiorna"}</button></div>${usersError?`<div class="emptyBox">Errore caricamento utenti: ${escapeHtml(usersError)}</div>`:""}${usersLoading?`<div class="emptyBox">Caricamento utenti...</div>`:""}${(!usersLoading&&!usersRows.length&&!usersError)?`<div class="emptyBox">Nessun utente trovato.</div>`:""}${(usersRows||[]).map(u=>{ const pending=pointPendingIds.has(u.id)?"disabled":""; const rawEmail=String(u.email||"senza email"); const email=escapeHtml(rawEmail); const uid=escapeHtml(String(u.id||"")); const pts=Number(u.points||0); return `<div class="userRow" data-id="${uid}" data-email="${escapeHtml(rawEmail)}"><div class="userEmail">${email}</div><div class="userPoints">${pts} pt</div><div class="pointButtons"><button type="button" class="pointBtn minus" ${pending} onclick="event.preventDefault(); event.stopPropagation(); changeUserPoints('${uid}', -1)">−</button><button type="button" class="pointBtn plus" ${pending} onclick="event.preventDefault(); event.stopPropagation(); changeUserPoints('${uid}', 1)">+</button></div></div>`; }).join("")}</div></div>`;
+
+  const activityCard = `<div class="container" id="activityCard"><div class="card chartShell"><div class="promo">Riepilogo convalide</div><div class="usageLead">Promo giornaliere convalidate e annullate • ultimi 7 giorni</div><div class="activityGridPro">${(activityStats.ready?activityStats.days:[]).map(d=>{ const total=Number(d.approved||0)+Number(d.canceled||0); const okPct=total?Math.round((Number(d.approved||0)/total)*100):0; return `<div class="activityDayCard"><div class="activityTop"><div><div class="activityDate">${escapeHtml(d.label)}</div><div class="activityLabel">Riepilogo giorno</div></div><div class="activityTotal">Totale ${total}</div></div><div class="activityCounts"><div class="activityCountBox ok"><b>${Number(d.approved||0)}</b><span>Convalidate</span></div><div class="activityCountBox bad"><b>${Number(d.canceled||0)}</b><span>Annullate</span></div></div><div class="activityBar" title="${okPct}% convalidate"><div class="activityBarFill" style="width:${okPct}%"></div></div>${total===0?`<div class="activityEmptyNote">Nessuna richiesta in questa data.</div>`:""}</div>`; }).join("") || `<div class="emptyBox">Caricamento riepilogo...</div>`}</div></div></div>`;
+
+  const main = activeTab==="missions" ? renderMissions() : activeTab==="images" ? renderMediaLibrary() : activeTab==="notices" ? renderNotices() : activeTab==="appearance" ? renderAppearance() : activeTab==="users"
+    ? usersList
+    : activeTab==="rewards"
+      ? rewardsList
+      : activeTab==="managePromos"
+        ? renderManagePromos()
+        : activeTab==="manageRewards"
+          ? renderManageRewards()
+          : activeTab==="manageNews"
+            ? renderManageNews()
+            : promoList;
+
+  const title = activeTab==="missions" ? "Missioni mensili" : activeTab==="images" ? "Raccolta immagini" : activeTab==="notices" ? "Avvisi ai clienti" : activeTab==="appearance" ? "Aspetto dell’app" : activeTab==="users"
+    ? "Gestione utenti"
+    : activeTab==="rewards"
+      ? "Premi in attesa"
+      : activeTab==="managePromos"
+        ? "Gestione promozioni"
+        : activeTab==="manageRewards"
+          ? "Gestione premi"
+          : activeTab==="manageNews"
+            ? "Gestione novità"
+            : "Convalide in attesa";
+  const showActivity = activeTab === "promo" || activeTab === "rewards" || activeTab === "users";
+  document.getElementById("app").innerHTML = `<div class="header"><div class="staffBar"><div class="staffBrand">Kiosk<small>Gelateria L’Altromare · Pannello staff</small></div><button class="adminBtn secondary" onclick="staffVerified=false;sb.auth.signOut().then(()=>location.reload())">Esci</button></div><div class="title">${title}</div><div class="toprow"><div class="${statusBadgeClass}"><span class="${dotClass}"></span>${statusLabel}</div></div>${tabs}${kbdHint}${errText}</div>${main}${showActivity ? activityCard : ""}`;
+  if(activeTab === "appearance") previewTheme();
+  if(activeTab === "users") setTimeout(filterUserRowsInDom, 0);
+}
+
+async function approve(id, promoTitle=""){
+  if(pendingPromoIds.has(id)) return;
+  pendingPromoIds.add(id);
+  renderAll(); // refresh UI to disable buttons immediately
+  try{
+    const { error } = await sb.from("redemptions")
+      .update({status:"approved"})
+      .eq("id",id)
+      .eq("status","waiting");
+
+    if(error) throw error;
+
+    await sendRedemptionUpdate(id, "approved");
+    showToast("✅ Convalidata: " + (promoTitle || id), "ok");
+  }catch(e){
+    console.error(e);
+    showToast("❌ Errore convalida", "bad");
+  }finally{
+    pendingPromoIds.delete(id);
+    renderAll();
+  }
+}
+
+async function cancel(id, promoTitle=""){
+  if(pendingPromoIds.has(id)) return;
+  pendingPromoIds.add(id);
+  renderAll();
+  try{
+    const { error } = await sb.from("redemptions")
+      .update({status:"canceled"})
+      .eq("id",id)
+      .eq("status","waiting");
+
+    if(error) throw error;
+
+    await sendRedemptionUpdate(id, "canceled");
+    showToast("❌ Annullata: " + (promoTitle || id), "bad");
+  }catch(e){
+    console.error(e);
+    showToast("❌ Errore annulla", "bad");
+  }finally{
+    pendingPromoIds.delete(id);
+    renderAll();
+  }
+}
+
+function renderBootError(message){
+  const app = document.getElementById("app");
+  if(!app) return;
+  app.innerHTML = `<div class="login"><h2>Kiosk non avviato</h2><div class="card" style="max-width:520px;text-align:center;"><div class="promo">Errore caricamento</div><div class="small">${escapeHtml(message || "Errore sconosciuto")}</div><button class="loginBtn" style="margin-top:14px;" onclick="location.reload()">Riprova</button></div></div>`;
+}
+
+if(!sb){
+  renderBootError(window.__kioskBootError || "Supabase non inizializzato.");
+}else{
+  sb.auth.getSession().then(({data, error})=>{
+    if(error){
+      try{ localStorage.removeItem("gelatoclub_kiosk_auth_v1"); }catch(e){}
+      sb.auth.signOut();
+      renderLogin();
+      return;
+    }
+    if(data.session){
+      checkStaff();
+    }else{
+      renderLogin();
+    }
+  }).catch((e)=>{
+    console.error(e);
+    renderBootError(e?.message || String(e));
+  });
+}
+</script>
+</body>
+</html>
